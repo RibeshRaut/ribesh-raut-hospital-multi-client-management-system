@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,8 +54,9 @@ import {
   Play,
   Shield,
   Activity,
+  CreditCard,
 } from "lucide-react";
-import { hospitalAPI, contactFormAPI, scheduleAPI, appointmentAPI } from "@/lib/api";
+import { hospitalAPI, contactFormAPI, scheduleAPI, appointmentAPI, paymentAPI } from "@/lib/api";
 import { ChatWidget } from "@/components/chat-widget";
 
 interface Doctor {
@@ -127,6 +128,7 @@ interface HospitalData {
 
 export default function HospitalPublicPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const slug = params?.slug as string;
 
   const [hospital, setHospital] = useState<HospitalData | null>(null);
@@ -138,6 +140,10 @@ export default function HospitalPublicPage() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [currentBgIndex, setCurrentBgIndex] = useState(0);
+
+  // Payment status from URL
+  const [paymentStatus, setPaymentStatus] = useState<'success' | 'cancelled' | null>(null);
+  const [paymentAppointmentId, setPaymentAppointmentId] = useState<string | null>(null);
 
   // Booking state
   const [bookingDoctor, setBookingDoctor] = useState<Doctor | null>(null);
@@ -155,6 +161,7 @@ export default function HospitalPublicPage() {
   const [isBooking, setIsBooking] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingError, setBookingError] = useState("");
+  const [redirectingToPayment, setRedirectingToPayment] = useState(false);
 
   // Contact form state
   const [contactForm, setContactForm] = useState({
@@ -171,6 +178,20 @@ export default function HospitalPublicPage() {
   useEffect(() => {
     if (slug) fetchHospitalData();
   }, [slug]);
+
+  // Handle payment return from Stripe
+  useEffect(() => {
+    const payment = searchParams.get('payment');
+    const appointmentId = searchParams.get('appointment');
+    
+    if (payment === 'success') {
+      setPaymentStatus('success');
+      setPaymentAppointmentId(appointmentId);
+    } else if (payment === 'cancelled') {
+      setPaymentStatus('cancelled');
+      setPaymentAppointmentId(appointmentId);
+    }
+  }, [searchParams]);
 
   // Background carousel effect
   useEffect(() => {
@@ -308,12 +329,21 @@ export default function HospitalPublicPage() {
     setIsBooking(true);
     setBookingError("");
     setBookingSuccess(false);
+    setRedirectingToPayment(false);
+
     try {
       const year = selectedDate.getFullYear();
       const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
       const day = String(selectedDate.getDate()).padStart(2, "0");
       const formattedDate = `${year}-${month}-${day}`;
-      await appointmentAPI.create({
+
+      let consultationFee = bookingDoctor.consultationFee;
+      if (!consultationFee || consultationFee <= 0) {
+        consultationFee = 500; // Default to 500 NRS if not set
+      }
+
+      setRedirectingToPayment(true);
+      const response = await paymentAPI.createCheckoutSession({
         doctorId: bookingDoctor._id,
         hospitalId: hospital._id,
         appointmentDate: formattedDate,
@@ -323,14 +353,18 @@ export default function HospitalPublicPage() {
         patientPhone: bookingForm.patientPhone,
         reason: bookingForm.reason,
         duration: bookingSchedule?.slotDuration || 30,
+        // Pass the fee to backend if needed (optional, backend should always use doctor.consultationFee or default)
       });
-      setBookingSuccess(true);
-      setTimeout(() => {
-        setBookingDoctor(null);
-        setBookingSchedule(null);
-        setBookingSuccess(false);
-      }, 3000);
+
+      const data = response.data as { sessionUrl: string; sessionId: string };
+      // Redirect to Stripe Checkout
+      if (data.sessionUrl) {
+        window.location.href = data.sessionUrl;
+      } else {
+        throw new Error('Failed to create payment session');
+      }
     } catch (err: any) {
+      setRedirectingToPayment(false);
       setBookingError(err.message || "Failed to book appointment");
     } finally {
       setIsBooking(false);
@@ -953,12 +987,13 @@ export default function HospitalPublicPage() {
 
       {/* Doctor Profile Dialog */}
       <Dialog open={!!selectedDoctor} onOpenChange={() => setSelectedDoctor(null)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent 
+          title="Doctor Profile"
+          className="sm:max-w-lg"
+        >
           {selectedDoctor && (
             <>
-              <DialogHeader>
-                <DialogTitle>Doctor Profile</DialogTitle>
-              </DialogHeader>
+              <DialogHeader></DialogHeader>
               <div className="flex flex-col items-center text-center">
                 <Avatar className="h-24 w-24 ring-4 ring-primary/10 mb-4">
                   <AvatarImage src={getDoctorPhotoUrl(selectedDoctor) || undefined} />
@@ -994,8 +1029,12 @@ export default function HospitalPublicPage() {
 
       {/* Image Lightbox */}
       <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
-        <DialogContent className="sm:max-w-4xl p-0 bg-black/95 border-none">
-          <VisuallyHidden><DialogTitle>Image Preview</DialogTitle></VisuallyHidden>
+        <DialogContent 
+          title="Image Preview"
+          hideTitle={true}
+          showCloseButton={false}
+          className="sm:max-w-4xl p-0 bg-black/95 border-none"
+        >
           <button onClick={() => setSelectedImage(null)} className="absolute top-4 right-4 z-10 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors">
             <X className="h-6 w-6 text-white" />
           </button>
@@ -1005,11 +1044,13 @@ export default function HospitalPublicPage() {
 
       {/* Booking Dialog */}
       <Dialog open={!!bookingDoctor} onOpenChange={() => setBookingDoctor(null)}>
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent 
+          title="Book Appointment"
+          className="sm:max-w-xl max-h-[90vh] overflow-y-auto"
+        >
           {bookingDoctor && bookingSchedule && (
             <>
               <DialogHeader>
-                <DialogTitle>Book Appointment</DialogTitle>
                 <DialogDescription>Schedule your visit with {bookingDoctor.name}</DialogDescription>
               </DialogHeader>
 
@@ -1074,6 +1115,36 @@ export default function HospitalPublicPage() {
                           <Textarea value={bookingForm.reason} onChange={(e) => setBookingForm({ ...bookingForm, reason: e.target.value })} rows={2} />
                         </div>
                       </div>
+
+                      {/* Payment Summary */}
+                      {bookingDoctor.consultationFee && bookingDoctor.consultationFee > 0 && (
+                        <>
+                          <Separator />
+                          <div className="space-y-3">
+                            <h4 className="font-medium flex items-center gap-2">
+                              <CreditCard className="h-4 w-4" />
+                              Payment Summary
+                            </h4>
+                            <div className="p-4 bg-secondary/50 rounded-lg space-y-2">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Consultation Fee</span>
+                                <span>Rs. {bookingDoctor.consultationFee}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Advance Payment (50%)</span>
+                                <span className="font-semibold text-primary">Rs. {Math.round(bookingDoctor.consultationFee / 2)}</span>
+                              </div>
+                              <div className="flex justify-between text-sm pt-2 border-t">
+                                <span className="text-muted-foreground">Remaining (Pay at Clinic)</span>
+                                <span>Rs. {bookingDoctor.consultationFee - Math.round(bookingDoctor.consultationFee / 2)}</span>
+                              </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              You'll be redirected to a secure payment page to complete the advance payment.
+                            </p>
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
 
@@ -1084,13 +1155,65 @@ export default function HospitalPublicPage() {
                     </div>
                   )}
 
-                  <Button type="submit" className="w-full" disabled={!selectedDate || !selectedTime || !bookingForm.patientName || !bookingForm.patientEmail || !bookingForm.patientPhone || isBooking}>
-                    {isBooking ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CalendarIcon className="h-4 w-4 mr-2" />}
-                    Confirm Booking
+                  <Button type="submit" className="w-full" disabled={!selectedDate || !selectedTime || !bookingForm.patientName || !bookingForm.patientEmail || !bookingForm.patientPhone || isBooking || redirectingToPayment}>
+                    {isBooking || redirectingToPayment ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        {redirectingToPayment ? "Redirecting to Payment..." : "Processing..."}
+                      </>
+                    ) : (
+                      <>
+                        {bookingDoctor.consultationFee && bookingDoctor.consultationFee > 0 ? (
+                          <>
+                            <CreditCard className="h-4 w-4 mr-2" />
+                            Pay Rs. {Math.round(bookingDoctor.consultationFee / 2)} & Book
+                          </>
+                        ) : (
+                          <>
+                            <CalendarIcon className="h-4 w-4 mr-2" />
+                            Confirm Booking
+                          </>
+                        )}
+                      </>
+                    )}
                   </Button>
                 </form>
               )}
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Status Dialog */}
+      <Dialog open={!!paymentStatus} onOpenChange={() => setPaymentStatus(null)}>
+        <DialogContent 
+          title={paymentStatus === 'success' ? 'Payment Successful!' : 'Payment Cancelled'}
+          className="sm:max-w-md"
+        >
+          {paymentStatus === 'success' ? (
+            <div className="py-8 text-center">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="h-8 w-8 text-emerald-600" />
+              </div>
+              <p className="text-muted-foreground mb-4">
+                Your appointment has been confirmed. You will receive a confirmation email shortly.
+              </p>
+              <Button onClick={() => setPaymentStatus(null)} className="w-full">
+                Continue
+              </Button>
+            </div>
+          ) : (
+            <div className="py-8 text-center">
+              <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="h-8 w-8 text-amber-600" />
+              </div>
+              <p className="text-muted-foreground mb-4">
+                Your payment was cancelled. You can try booking again.
+              </p>
+              <Button onClick={() => setPaymentStatus(null)} className="w-full">
+                Close
+              </Button>
+            </div>
           )}
         </DialogContent>
       </Dialog>

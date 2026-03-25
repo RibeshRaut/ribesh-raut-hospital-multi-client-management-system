@@ -123,41 +123,42 @@ export default function DoctorsPage() {
     return null;
   };
 
+  // Fetch doctors and specialties
+  const fetchData = async () => {
+    const hospitalId = getHospitalId();
+    if (!hospitalId) {
+      setError("Hospital ID not found. Please log in again.");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Fetch doctors and specialties in parallel
+      const [doctorsResponse, specialtiesResponse] = await Promise.all([
+        doctorAPI.getByHospital(hospitalId),
+        doctorAPI.getSpecialties(hospitalId).catch(() => ({ data: [] })),
+      ]);
+
+      setDoctors((doctorsResponse.data as Doctor[]) || []);
+      
+      // Merge API specialties with default specialties (unique values)
+      const apiSpecialties = (specialtiesResponse.data as string[]) || [];
+      const mergedSpecialties = [...new Set([...defaultSpecialties, ...apiSpecialties])].sort();
+      setSpecialties(mergedSpecialties);
+    } catch (err: any) {
+      console.error("Error fetching data:", err);
+      setError(err.message || "Failed to load doctors. Please try again later.");
+      setDoctors([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Fetch doctors and specialties on component mount
   useEffect(() => {
-    const fetchData = async () => {
-      const hospitalId = getHospitalId();
-      if (!hospitalId) {
-        setError("Hospital ID not found. Please log in again.");
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        // Fetch doctors and specialties in parallel
-        const [doctorsResponse, specialtiesResponse] = await Promise.all([
-          doctorAPI.getByHospital(hospitalId),
-          doctorAPI.getSpecialties(hospitalId).catch(() => ({ data: [] })),
-        ]);
-
-        setDoctors(doctorsResponse.data || []);
-        
-        // Merge API specialties with default specialties (unique values)
-        const apiSpecialties = (specialtiesResponse.data as string[]) || [];
-        const mergedSpecialties = [...new Set([...defaultSpecialties, ...apiSpecialties])].sort();
-        setSpecialties(mergedSpecialties);
-      } catch (err: any) {
-        console.error("Error fetching data:", err);
-        setError(err.message || "Failed to load doctors. Please try again later.");
-        setDoctors([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchData();
   }, []);
 
@@ -299,14 +300,14 @@ export default function DoctorsPage() {
         // Update doctor
         const docId = editingDoctor._id || editingDoctor.id;
         const response = await doctorAPI.update(docId!, doctorData);
-        savedDoctor = response.data;
+        savedDoctor = response.data as Doctor;
 
         // Upload photo if selected
         if (selectedPhoto && docId) {
           setIsUploadingPhoto(true);
           try {
             const photoResponse = await doctorAPI.uploadPhoto(docId, selectedPhoto);
-            savedDoctor = photoResponse.data;
+            savedDoctor = photoResponse.data as Doctor;
           } catch (photoErr: any) {
             console.error("Photo upload failed:", photoErr);
             // Continue even if photo upload fails
@@ -329,7 +330,7 @@ export default function DoctorsPage() {
           ...doctorData,
           hospitalId,
         });
-        savedDoctor = response.data;
+        savedDoctor = response.data as Doctor;
 
         // Upload photo if selected
         const newDocId = savedDoctor._id || savedDoctor.id;
@@ -337,7 +338,7 @@ export default function DoctorsPage() {
           setIsUploadingPhoto(true);
           try {
             const photoResponse = await doctorAPI.uploadPhoto(newDocId, selectedPhoto);
-            savedDoctor = photoResponse.data;
+            savedDoctor = photoResponse.data as Doctor;
           } catch (photoErr: any) {
             console.error("Photo upload failed:", photoErr);
           }
@@ -385,7 +386,7 @@ export default function DoctorsPage() {
       setMutationError(null);
 
       const docId = deletingDoctor._id || deletingDoctor.id;
-      await doctorAPI.delete(docId);
+      await doctorAPI.delete(docId!);
 
       // Remove from local state
       setDoctors(
@@ -544,7 +545,7 @@ export default function DoctorsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={fetchDoctors}
+              onClick={fetchData}
             >
               Retry
             </Button>
@@ -587,11 +588,11 @@ export default function DoctorsPage() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+        <DialogContent 
+          title={editingDoctor ? "Edit Doctor" : "Add New Doctor"}
+          className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto"
+        >
           <DialogHeader>
-            <DialogTitle>
-              {editingDoctor ? "Edit Doctor" : "Add New Doctor"}
-            </DialogTitle>
             <DialogDescription>
               {editingDoctor
                 ? "Update the doctor's information below."
@@ -865,9 +866,11 @@ export default function DoctorsPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent 
+          title="Delete Doctor"
+          className="sm:max-w-[400px]"
+        >
           <DialogHeader>
-            <DialogTitle>Delete Doctor</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete {deletingDoctor?.name}? This
               action cannot be undone.

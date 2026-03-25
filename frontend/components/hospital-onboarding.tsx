@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Alert, AlertDescription } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   CheckCircle2,
   AlertCircle,
@@ -22,6 +22,7 @@ import {
   Phone,
   Mail,
   MapPin,
+  ArrowRight,
 } from "lucide-react";
 import { hospitalAPI, APIError } from "@/lib/api";
 import { validatePhone, validateEmail, validateName } from "@/lib/validation";
@@ -97,7 +98,7 @@ export default function HospitalOnboarding() {
             if (response.data) {
               setFormData((prev) => ({
                 ...prev,
-                ...response.data,
+                ...(response.data as any),
               }));
             }
           } catch (error) {
@@ -147,9 +148,9 @@ export default function HospitalOnboarding() {
     }
 
     if (step.id === 3) {
-      if (!formData.description.trim()) {
+      if (!formData.description?.trim()) {
         stepErrors.description = "Hospital description is required";
-      } else if (formData.description.length < 10) {
+      } else if ((formData.description || "").length < 10) {
         stepErrors.description = "Description must be at least 10 characters";
       }
     }

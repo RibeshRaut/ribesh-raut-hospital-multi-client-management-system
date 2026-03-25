@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { appointmentAPI, tokenManager } from "@/lib/api";
+import { useSocket } from "@/lib/useSocket";
 
 export interface Notification {
   id: string;
@@ -33,6 +34,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [lastCheckedAt, setLastCheckedAt] = useState<Date>(new Date());
   const [pendingAppointmentsCount, setPendingAppointmentsCount] = useState(0);
   const [waitingChatsCount, setWaitingChatsCount] = useState(0);
+  const { socket, on } = useSocket({ autoConnect: true });
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -59,6 +61,121 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const clearNotifications = useCallback(() => {
     setNotifications([]);
   }, []);
+
+  // Setup WebSocket listeners for real-time updates
+  useEffect(() => {
+    if (!socket) return;
+
+    // Listen for new appointment requests
+    const unsubscribeAppointmentCreated = on('appointment:created', (data) => {
+      console.log('🔔 New appointment received:', data);
+      addNotification({
+        type: 'appointment',
+        title: 'New Appointment Request',
+        message: `${data.userName || data.patientName || 'A patient'} has requested an appointment`,
+        link: '/dashboard/appointments',
+        data,
+      });
+      // Update pending count
+      setPendingAppointmentsCount((prev) => prev + 1);
+    });
+
+    // Listen for appointment status updates
+    const unsubscribeAppointmentStatusUpdated = on('appointment:statusUpdated', (data) => {
+      console.log('🔔 Appointment status updated:', data);
+      addNotification({
+        type: 'appointment',
+        title: 'Appointment Status Updated',
+        message: `Appointment status changed to ${data.status}`,
+        link: '/dashboard/appointments',
+        data,
+      });
+    });
+
+    // Listen for appointment cancellations
+    const unsubscribeAppointmentCancelled = on('appointment:cancelled', (data) => {
+      console.log('🔔 Appointment cancelled:', data);
+      addNotification({
+        type: 'appointment',
+        title: 'Appointment Cancelled',
+        message: `Appointment has been cancelled`,
+        link: '/dashboard/appointments',
+        data,
+      });
+    });
+
+    // Listen for new contact form submissions
+    const unsubscribeContactFormSubmitted = on('contactForm:submitted', (data) => {
+      console.log('🔔 New contact form received:', data);
+      addNotification({
+        type: 'message',
+        title: 'New Contact Form',
+        message: `${data.name} submitted a contact form: ${data.subject}`,
+        link: '/dashboard/messages',
+        data,
+      });
+    });
+
+    // Listen for contact form status updates
+    const unsubscribeContactFormStatusUpdated = on('contactForm:statusUpdated', (data) => {
+      console.log('🔔 Contact form status updated:', data);
+      addNotification({
+        type: 'message',
+        title: 'Contact Form Updated',
+        message: `Contact form status changed to ${data.status}`,
+        link: '/dashboard/messages',
+        data,
+      });
+    });
+
+    // Listen for payment success
+    const unsubscribePaymentSuccess = on('payment:paymentSuccess', (data) => {
+      console.log('💳 Payment successful:', data);
+      addNotification({
+        type: 'system',
+        title: 'Payment Successful',
+        message: 'Your appointment payment has been processed',
+        link: '/dashboard/appointments',
+        data,
+      });
+    });
+
+    // Listen for payment failures
+    const unsubscribePaymentFailed = on('payment:paymentFailed', (data) => {
+      console.log('❌ Payment failed:', data);
+      addNotification({
+        type: 'system',
+        title: 'Payment Failed',
+        message: `Payment failed: ${data.reason || 'Please try again'}`,
+        link: '/dashboard/appointments',
+        data,
+      });
+    });
+
+    // Listen for payment expiration
+    const unsubscribePaymentExpired = on('payment:paymentExpired', (data) => {
+      console.log('⏰ Payment expired:', data);
+      addNotification({
+        type: 'system',
+        title: 'Payment Expired',
+        message: 'Your payment session has expired. Please try again.',
+        link: '/dashboard/appointments',
+        data,
+      });
+    });
+
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribeAppointmentCreated();
+      unsubscribeAppointmentStatusUpdated();
+      unsubscribeAppointmentCancelled();
+      unsubscribeContactFormSubmitted();
+      unsubscribeContactFormStatusUpdated();
+      unsubscribePaymentSuccess();
+      unsubscribePaymentFailed();
+      unsubscribePaymentExpired();
+    };
+  }, [socket, on, addNotification]);
 
   const refreshNotifications = useCallback(async () => {
     try {

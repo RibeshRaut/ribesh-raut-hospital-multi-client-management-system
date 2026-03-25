@@ -344,11 +344,11 @@ export default function ServicesPage() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent 
+          title={editingService ? "Edit Service" : "Add New Service"}
+          className="sm:max-w-[500px]"
+        >
           <DialogHeader>
-            <DialogTitle>
-              {editingService ? "Edit Service" : "Add New Service"}
-            </DialogTitle>
             <DialogDescription>
               {editingService
                 ? "Update the service details below."
@@ -485,9 +485,11 @@ export default function ServicesPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent 
+          title="Delete Service"
+          className="sm:max-w-[400px]"
+        >
           <DialogHeader>
-            <DialogTitle>Delete Service</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete &quot;{deletingService?.name}
               &quot;? This action cannot be undone.

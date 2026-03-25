@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { appointmentAPI, doctorAPI } from "@/lib/api";
 import { validateEmail, validatePhone, validateFutureDate, validateTime } from "@/lib/validation";
+import { useSocket } from "@/lib/useSocket";
 
 type AppointmentStatus = "Pending" | "Confirmed" | "Completed" | "Cancelled";
 
@@ -69,6 +70,9 @@ type Appointment = {
   notes?: string;
   hospitalId?: string;
   createdAt?: string;
+  paymentStatus?: string;
+  paymentAmount?: number;
+  consultationFee?: number;
 };
 
 type Doctor = {
@@ -99,6 +103,7 @@ export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [activeTab, setActiveTab] = useState("appointments");
+  const { socket, on } = useSocket({ autoConnect: true });
 
   // Dialog states
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
@@ -131,6 +136,49 @@ export default function AppointmentsPage() {
     fetchDoctors();
   }, []);
 
+  // Setup real-time listeners for appointment updates
+  useEffect(() => {
+    if (!socket) return;
+
+    const userStr = localStorage.getItem("userInfo");
+    if (!userStr) return;
+
+    const user = JSON.parse(userStr);
+    const hospitalId = user.hospitalId || user._id;
+
+    if (!hospitalId) return;
+
+    // Join hospital room for appointment updates
+    socket.emit('appointment:join', { hospitalId });
+
+    // Listen for new appointment requests
+    const unsubscribeCreated = on('appointment:created', (data) => {
+      console.log('🔔 New appointment event received:', data);
+      // Refetch appointments to get the latest data
+      fetchAppointments();
+    });
+
+    // Listen for appointment status updates
+    const unsubscribeStatusUpdated = on('appointment:statusUpdated', (data) => {
+      console.log('🔔 Appointment status updated event:', data);
+      // Refetch appointments to get the latest data
+      fetchAppointments();
+    });
+
+    // Listen for appointment cancellations
+    const unsubscribeCancelled = on('appointment:cancelled', (data) => {
+      console.log('🔔 Appointment cancelled event:', data);
+      // Refetch appointments to get the latest data
+      fetchAppointments();
+    });
+
+    return () => {
+      unsubscribeCreated();
+      unsubscribeStatusUpdated();
+      unsubscribeCancelled();
+    };
+  }, [socket, on]);
+
   const fetchAppointments = async () => {
     try {
       setIsLoading(true);
@@ -154,7 +202,7 @@ export default function AppointmentsPage() {
       // Fetch by hospital
       const response = await appointmentAPI.getByHospital(hospitalId);
       // Map backend field names to frontend field names
-      const mappedAppointments = (response.data || []).map((apt: any) => ({
+      const mappedAppointments = ((response.data as any[]) || []).map((apt: any) => ({
         ...apt,
         patientName: apt.patientName || apt.userName || 'Unknown Patient',
         patientEmail: apt.patientEmail || apt.userEmail || '',
@@ -165,6 +213,9 @@ export default function AppointmentsPage() {
         doctorId: apt.doctorId?._id || apt.doctorId,
         // Normalize status from backend lowercase to frontend capitalized
         status: normalizeStatus(apt.status),
+        paymentStatus: apt.paymentStatus || 'pending',
+        paymentAmount: apt.paymentAmount,
+        consultationFee: apt.consultationFee,
       }));
       // Sort by createdAt (newest first)
       mappedAppointments.sort((a: any, b: any) => {
@@ -195,7 +246,7 @@ export default function AppointmentsPage() {
       if (!hospitalId) return;
 
       const response = await doctorAPI.getByHospital(hospitalId);
-      setDoctors(response.data || []);
+      setDoctors((response.data as Doctor[]) || []);
     } catch (err) {
       console.error("Error fetching doctors:", err);
     }
@@ -288,7 +339,7 @@ export default function AppointmentsPage() {
         hospitalId,
       });
 
-      setAppointments([...appointments, response.data]);
+      setAppointments([...appointments, response.data as Appointment]);
       setIsNewDialogOpen(false);
       setFormData({
         patientName: "",
@@ -398,6 +449,40 @@ export default function AppointmentsPage() {
             </div>
           </div>
         );
+      },
+    },
+    {
+      accessorKey: "paymentStatus",
+      header: "Payment Status",
+      cell: ({ row }) => {
+        const status = row.original.paymentStatus || 'pending';
+        let color = "bg-amber-50 text-amber-700 border-amber-200";
+        if (status === 'half_paid') color = "bg-blue-50 text-blue-700 border-blue-200";
+        if (status === 'paid') color = "bg-emerald-50 text-emerald-700 border-emerald-200";
+        if (status === 'failed') color = "bg-red-50 text-red-700 border-red-200";
+        if (status === 'refunded') color = "bg-purple-50 text-purple-700 border-purple-200";
+        const displayStatus = status === 'half_paid' ? 'Half Paid' : status.charAt(0).toUpperCase() + status.slice(1);
+        return (
+          <Badge variant="outline" className={`${color} border rounded-full px-3 py-1 text-xs font-semibold`}>
+            {displayStatus}
+          </Badge>
+        );
+      },
+    },
+    {
+      accessorKey: "paymentAmount",
+      header: "Paid ($)",
+      cell: ({ row }) => {
+        const amt = row.original.paymentAmount;
+        return <span>{amt != null ? `$${amt}` : '-'}</span>;
+      },
+    },
+    {
+      accessorKey: "consultationFee",
+      header: "Total Fee ($)",
+      cell: ({ row }) => {
+        const fee = row.original.consultationFee;
+        return <span>{fee != null ? `$${fee}` : '-'}</span>;
       },
     },
     {
@@ -591,7 +676,7 @@ export default function AppointmentsPage() {
 
       {/* New Appointment Dialog */}
       <Dialog open={isNewDialogOpen} onOpenChange={setIsNewDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px]" title="Create New Appointment">
           <DialogHeader>
             <DialogTitle>Create New Appointment</DialogTitle>
             <DialogDescription>
@@ -783,7 +868,7 @@ export default function AppointmentsPage() {
 
       {/* View Appointment Dialog */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px]" title="Appointment Details">
           <DialogHeader>
             <DialogTitle>Appointment Details</DialogTitle>
           </DialogHeader>
@@ -836,6 +921,37 @@ export default function AppointmentsPage() {
                         {selectedAppointment.status}
                       </span>
                     </Badge>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Payment Status:</span>
+                    <Badge 
+                      variant="outline" 
+                      className={`ml-2 ${
+                        selectedAppointment.paymentStatus === 'half_paid' 
+                          ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                          : selectedAppointment.paymentStatus === 'paid' 
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                          : selectedAppointment.paymentStatus === 'failed' 
+                          ? 'bg-red-50 text-red-700 border-red-200' 
+                          : selectedAppointment.paymentStatus === 'refunded'
+                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      } border rounded-full px-3 py-1 text-xs font-semibold`}
+                    >
+                      {selectedAppointment.paymentStatus === 'half_paid' 
+                        ? 'Half Paid' 
+                        : selectedAppointment.paymentStatus 
+                        ? selectedAppointment.paymentStatus.charAt(0).toUpperCase() + selectedAppointment.paymentStatus.slice(1) 
+                        : 'Pending'}
+                    </Badge>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Paid:</span>
+                    <span className="ml-2">{selectedAppointment.paymentAmount != null ? `$${selectedAppointment.paymentAmount}` : '-'}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Total Fee:</span>
+                    <span className="ml-2">{selectedAppointment.consultationFee != null ? `$${selectedAppointment.consultationFee}` : '-'}</span>
                   </div>
                 </div>
               </div>

@@ -51,6 +51,30 @@ const appointmentSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // Payment fields
+    consultationFee: {
+      type: Number,
+      default: 0,
+      description: 'Total consultation fee from doctor',
+    },
+    paymentAmount: {
+      type: Number,
+      default: 0,
+      description: 'Amount paid (50% of consultation fee)',
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'half_paid', 'paid', 'failed', 'refunded'],
+      default: 'pending',
+    },
+    stripeSessionId: {
+      type: String,
+      default: '',
+    },
+    stripePaymentIntentId: {
+      type: String,
+      default: '',
+    },
   },
   { timestamps: true }
 );

@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { contactFormAPI, APIError } from "@/lib/api";
+import { useSocket } from "@/lib/useSocket";
 
 type Message = {
   id: string;
@@ -55,6 +56,7 @@ export default function MessagesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hospitalId, setHospitalId] = useState<string>("");
+  const { socket, on } = useSocket({ autoConnect: true });
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("userInfo") || "{}");
@@ -68,12 +70,60 @@ export default function MessagesPage() {
     }
   }, []);
 
+  // Setup real-time listeners for contact form updates
+  useEffect(() => {
+    if (!socket || !hospitalId) return;
+
+    // Join hospital room for contact form updates
+    socket.emit('contactForm:join', { hospitalId });
+
+    // Listen for new contact form submissions
+    const unsubscribeSubmitted = on('contactForm:submitted', (data) => {
+      console.log('🔔 New contact form received:', data);
+      if (data.hospitalId === hospitalId) {
+        // Add the new message to the list
+        setMessages((prev) => [
+          {
+            ...data,
+            id: data._id,
+            isStarred: data.isStarred || false,
+            subject: data.subject || 'General Inquiry',
+          },
+          ...prev,
+        ]);
+      }
+    });
+
+    // Listen for contact form status updates
+    const unsubscribeStatusUpdated = on('contactForm:statusUpdated', (data) => {
+      console.log('🔔 Contact form status updated:', data);
+      if (data.hospitalId === hospitalId) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === data._id
+              ? {
+                  ...msg,
+                  status: data.status,
+                  isStarred: data.isStarred ?? msg.isStarred,
+                }
+              : msg
+          )
+        );
+      }
+    });
+
+    return () => {
+      unsubscribeSubmitted();
+      unsubscribeStatusUpdated();
+    };
+  }, [socket, hospitalId, on]);
+
   const fetchMessages = async (hId: string) => {
     try {
       setIsLoading(true);
       setError(null);
       const response = await contactFormAPI.getByHospital(hId);
-      const fetchedMessages = (response.data || []).map((msg: any) => ({
+      const fetchedMessages = ((response.data as any[]) || []).map((msg: any) => ({
         ...msg,
         id: msg._id,
         isStarred: msg.isStarred || false,

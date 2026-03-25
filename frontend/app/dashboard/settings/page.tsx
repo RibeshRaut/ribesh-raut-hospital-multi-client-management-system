@@ -116,10 +116,10 @@ export default function SettingsPage() {
             if (response.data) {
               setHospitalData((prev) => ({
                 ...prev,
-                ...response.data,
+                ...(response.data as any),
                 socialLinks: {
                   ...prev.socialLinks,
-                  ...response.data.socialLinks,
+                  ...(response.data as any).socialLinks,
                 },
               }));
             }
@@ -243,10 +243,10 @@ export default function SettingsPage() {
 
     try {
       const response = await hospitalAPI.deleteImage(hospitalId, imageUrl);
-      if (response.data?.images) {
+      if ((response.data as any)?.images) {
         setHospitalData((prev) => ({
           ...prev,
-          images: response.data.images,
+          images: (response.data as any).images,
         }));
         setSuccessMessage("Image deleted successfully!");
         setTimeout(() => setSuccessMessage(""), 3000);
@@ -820,9 +820,8 @@ export default function SettingsPage() {
                 <DialogTrigger asChild>
                   <Button variant="destructive">Delete Account</Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent title="Are you absolutely sure?">
                   <DialogHeader>
-                    <DialogTitle>Are you absolutely sure?</DialogTitle>
                     <DialogDescription>
                       This action cannot be undone. This will permanently
                       delete your hospital account and all associated data.

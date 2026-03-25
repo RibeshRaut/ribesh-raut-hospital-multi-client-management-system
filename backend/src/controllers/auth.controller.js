@@ -6,6 +6,8 @@ import Admin from '../models/admin.model.js';
 import Hospital from '../models/hospital.model.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import { sendPasswordResetEmail } from '../services/email.service.js';
 
 export const login = async (req, res) => {
   try {
@@ -180,6 +182,106 @@ export const logout = async (req, res) => {
     res.status(200).json({ message: 'Logout successful' });
   } catch (error) {
     console.error('Error during logout:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email, userType } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    if (!userType || !['hospital', 'admin'].includes(userType)) {
+      return res.status(400).json({ error: 'Valid userType is required (hospital or admin)' });
+    }
+
+    let user;
+    let Model = userType === 'hospital' ? Hospital : Admin;
+    let searchField = userType === 'hospital' ? 'email' : 'username';
+
+    user = await Model.findOne({ [searchField]: email });
+
+    if (!user) {
+      // Don't reveal if user exists for security
+      return res.status(200).json({
+        message: 'If an account exists with this email/username, a password reset link has been sent.',
+      });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Save token and expiry to user
+    user.resetPasswordToken = resetTokenHash;
+    user.resetPasswordExpiry = resetTokenExpiry;
+    await user.save();
+
+    // Send reset email
+    const emailResult = await sendPasswordResetEmail({
+      email: userType === 'hospital' ? user.email : email,
+      resetToken,
+      userType,
+    });
+
+    if (!emailResult.success) {
+      return res.status(500).json({ error: 'Failed to send reset email' });
+    }
+
+    return res.status(200).json({
+      message: 'Password reset email sent successfully',
+    });
+  } catch (error) {
+    console.error('Error in forgotPassword:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { token, password, confirmPassword, userType } = req.body;
+
+    if (!token || !password || !confirmPassword || !userType) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: 'Passwords do not match' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Hash token for comparison
+    const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    let Model = userType === 'hospital' ? Hospital : Admin;
+
+    const user = await Model.findOne({
+      resetPasswordToken: resetTokenHash,
+      resetPasswordExpiry: { $gt: new Date() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    // Update password
+    user.password = password;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpiry = null;
+    await user.save();
+
+    return res.status(200).json({
+      message: 'Password reset successfully',
+    });
+  } catch (error) {
+    console.error('Error in resetPassword:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

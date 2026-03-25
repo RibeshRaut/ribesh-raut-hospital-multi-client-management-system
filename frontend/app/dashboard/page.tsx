@@ -77,7 +77,7 @@ export default function DashboardPage() {
       const response = await dashboardAPI.getStats(hospitalId);
       if (response.data) {
         setStats(response.data);
-        setRecentAppointments(response.data.recentAppointments || []);
+        setRecentAppointments((response.data as any)?.recentAppointments || []);
       }
     } catch (err: any) {
       console.error("Error fetching dashboard data:", err);

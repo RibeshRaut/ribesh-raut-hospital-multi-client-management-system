@@ -112,14 +112,14 @@ export default function RegisterPage() {
 
       if (response.data) {
         // Store token and user info
-        tokenManager.setToken(response.data.token);
+        tokenManager.setToken((response.data as any).token);
         localStorage.setItem(
           "userInfo",
           JSON.stringify({
-            id: response.data.user.id,
-            hospitalId: response.data.user.id,
-            userType: response.data.userType,
-            ...response.data.user,
+            id: (response.data as any).user.id,
+            hospitalId: (response.data as any).user.id,
+            userType: (response.data as any).userType,
+            ...(response.data as any).user,
           })
         );
 

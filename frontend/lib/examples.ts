@@ -33,21 +33,21 @@ export async function exampleLogin() {
 
     if (response.data) {
       // Store token
-      tokenManager.setToken(response.data.token);
+      tokenManager.setToken((response.data as any).token);
 
       // Store user info
       localStorage.setItem(
         'user',
         JSON.stringify({
-          id: response.data.user.id,
-          userType: response.data.userType,
-          ...response.data.user,
+          id: (response.data as any).user.id,
+          userType: (response.data as any).userType,
+          ...(response.data as any).user,
         })
       );
 
       console.log('✓ Login successful');
-      console.log('Token:', response.data.token);
-      console.log('User:', response.data.user);
+      console.log('Token:', (response.data as any).token);
+      console.log('User:', (response.data as any).user);
     }
   } catch (error) {
     if (error instanceof APIError) {
@@ -74,7 +74,7 @@ export async function exampleRegister() {
     });
 
     if (response.data) {
-      tokenManager.setToken(response.data.token);
+      tokenManager.setToken((response.data as any).token);
       console.log('✓ Registration successful');
     }
   } catch (error) {
@@ -100,7 +100,7 @@ export async function exampleCreateDoctor() {
 
     if (response.data) {
       console.log('✓ Doctor created successfully');
-      console.log('Doctor:', response.data.doctor);
+      console.log('Doctor:', (response.data as any).doctor);
     }
   } catch (error) {
     if (error instanceof APIError) {
@@ -119,7 +119,7 @@ export async function exampleGetDoctors(hospitalId: string) {
 
     if (response.data) {
       console.log('✓ Doctors retrieved successfully');
-      console.log('Count:', response.data.length);
+      console.log('Count:', (response.data as any[]).length);
       console.log('Doctors:', response.data);
     }
   } catch (error) {
@@ -157,7 +157,7 @@ export async function exampleCreateAppointment() {
 
     if (response.data) {
       console.log('✓ Appointment created successfully');
-      console.log('Appointment:', response.data);
+      console.log('Appointment:', (response.data as any));
     }
   } catch (error) {
     if (error instanceof APIError) {
@@ -176,7 +176,7 @@ export async function exampleGetUserAppointments(userId: string) {
 
     if (response.data) {
       console.log('✓ User appointments retrieved successfully');
-      console.log('Count:', response.data.length);
+      console.log('Count:', (response.data as any[]).length);
       console.log('Appointments:', response.data);
     }
   } catch (error) {
@@ -204,7 +204,7 @@ export async function exampleUpdateAppointmentStatus(
 
     if (response.data) {
       console.log('✓ Appointment status updated successfully');
-      console.log('Updated Appointment:', response.data);
+      console.log('Updated Appointment:', (response.data as any));
     }
   } catch (error) {
     if (error instanceof APIError) {
@@ -261,7 +261,8 @@ export async function exampleChatbot(message: string) {
 // ============================================
 // EXAMPLE 10: Using React Hook - useApi
 // ============================================
-
+// Note: This example is a React component. Use it in a .tsx file instead.
+/*
 export function ExampleComponentWithUseApi({ hospitalId }: { hospitalId: string }) {
   const { data: doctors, isLoading, error, execute } = useApi(() =>
     doctorAPI.getByHospital(hospitalId)
@@ -271,7 +272,7 @@ export function ExampleComponentWithUseApi({ hospitalId }: { hospitalId: string 
     <div>
       {isLoading && <p>Loading doctors...</p>}
       {error && <p className="text-red-500">Error: {error}</p>}
-      {doctors && (
+      {doctors && doctors.length > 0 && (
         <div>
           <h2>Doctors ({doctors.length})</h2>
           {doctors.map((doctor: any) => (
@@ -288,11 +289,13 @@ export function ExampleComponentWithUseApi({ hospitalId }: { hospitalId: string 
     </div>
   );
 }
+*/
 
 // ============================================
 // EXAMPLE 11: Using React Hook - useMutation
 // ============================================
-
+// Note: This example is a React component. Use it in a .tsx file instead.
+/*
 export function ExampleComponentWithMutation() {
   const { mutate: createDoctor, isLoading, error } = useMutation((data: any) =>
     doctorAPI.create(data)
@@ -325,6 +328,7 @@ export function ExampleComponentWithMutation() {
     </form>
   );
 }
+*/
 
 // ============================================
 // EXAMPLE 12: Token Management

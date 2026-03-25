@@ -84,6 +84,41 @@ const hospitalSchema = new mongoose.Schema(
     facilities: [{
       type: String,
     }],
+    resetPasswordToken: {
+      type: String,
+      default: null,
+    },
+    resetPasswordExpiry: {
+      type: Date,
+      default: null,
+    },
+    // Subscription fields
+    subscriptionStatus: {
+      type: String,
+      enum: ['inactive', 'active', 'cancelled', 'suspended'],
+      default: 'inactive',
+    },
+    subscriptionPlan: {
+      type: String,
+      enum: ['basic', 'professional', 'enterprise'],
+      default: null,
+    },
+    stripeCustomerId: {
+      type: String,
+      default: null,
+    },
+    stripeSubscriptionId: {
+      type: String,
+      default: null,
+    },
+    subscriptionStartDate: {
+      type: Date,
+      default: null,
+    },
+    subscriptionEndDate: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

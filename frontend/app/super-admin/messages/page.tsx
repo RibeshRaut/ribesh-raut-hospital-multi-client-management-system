@@ -479,9 +479,11 @@ export default function WebsiteMessagesPage() {
 
       {/* View Message Dialog */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent 
+          title="Message Details"
+          className="max-w-2xl"
+        >
           <DialogHeader>
-            <DialogTitle>Message Details</DialogTitle>
             <DialogDescription>
               From {selectedMessage?.firstName} {selectedMessage?.lastName}
             </DialogDescription>
@@ -548,9 +550,8 @@ export default function WebsiteMessagesPage() {
 
       {/* Reply Dialog */}
       <Dialog open={isReplyDialogOpen} onOpenChange={setIsReplyDialogOpen}>
-        <DialogContent>
+        <DialogContent title="Reply to Message">
           <DialogHeader>
-            <DialogTitle>Reply to Message</DialogTitle>
             <DialogDescription>
               Send a reply to {selectedMessage?.firstName} {selectedMessage?.lastName}
             </DialogDescription>

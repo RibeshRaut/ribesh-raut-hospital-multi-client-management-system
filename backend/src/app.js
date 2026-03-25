@@ -12,6 +12,9 @@ import dashboardRoutes from './routes/dashboard.routes.js';
 import serviceRoutes from './routes/service.routes.js';
 import scheduleRoutes from './routes/schedule.routes.js';
 import superAdminRoutes from './routes/superAdmin.routes.js';
+import paymentRoutes from './routes/payment.routes.js';
+import subscriptionRoutes from './routes/subscription.routes.js';
+import { handleStripeWebhook } from './controllers/payment.controller.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +26,10 @@ app.use(
     origin: '*',
   })
 );
+
+// Stripe webhook endpoint - must be before express.json() middleware
+// because Stripe needs the raw body for signature verification
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -44,6 +51,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/super-admin', superAdminRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

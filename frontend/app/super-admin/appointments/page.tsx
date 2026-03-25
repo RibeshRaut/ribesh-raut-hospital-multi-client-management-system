@@ -36,6 +36,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 import { superAdminAPI } from "@/lib/api";
+import { useSocket } from "@/lib/useSocket";
 
 interface Appointment {
   _id: string;
@@ -73,10 +74,47 @@ export default function AllAppointmentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const { socket, on } = useSocket({ autoConnect: true });
 
   useEffect(() => {
     fetchAppointments();
   }, [pagination.page, statusFilter]);
+
+  // Setup real-time listeners for appointment updates
+  useEffect(() => {
+    if (!socket) return;
+
+    // Join super-admin room for all appointment updates
+    socket.emit('superAdmin:join');
+
+    // Listen for new appointment requests
+    const unsubscribeCreated = on('appointment:created', (data) => {
+      console.log('🔔 New appointment event received in super-admin:', data);
+      // Reset to first page and refetch
+      setPagination((prev) => ({ ...prev, page: 1 }));
+      fetchAppointments();
+    });
+
+    // Listen for appointment status updates
+    const unsubscribeStatusUpdated = on('appointment:statusUpdated', (data) => {
+      console.log('🔔 Appointment status updated in super-admin:', data);
+      // Refetch to get the latest data
+      fetchAppointments();
+    });
+
+    // Listen for appointment cancellations
+    const unsubscribeCancelled = on('appointment:cancelled', (data) => {
+      console.log('🔔 Appointment cancelled in super-admin:', data);
+      // Refetch to get the latest data
+      fetchAppointments();
+    });
+
+    return () => {
+      unsubscribeCreated();
+      unsubscribeStatusUpdated();
+      unsubscribeCancelled();
+    };
+  }, [socket, on]);
 
   const fetchAppointments = async () => {
     try {

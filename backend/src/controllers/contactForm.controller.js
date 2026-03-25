@@ -1,4 +1,5 @@
 import ContactForm from '../models/contactForm.model.js';
+import { emitContactFormEvent } from '../socket.js';
 
 export const submitContactForm = async (req, res) => {
   try {
@@ -18,6 +19,16 @@ export const submitContactForm = async (req, res) => {
     });
 
     await contactForm.save();
+    
+    // Emit real-time event for new contact form
+    const io = req.app.get('io');
+    if (io) {
+      emitContactFormEvent(io, 'submitted', {
+        ...contactForm.toObject(),
+        status: 'unread',
+      });
+    }
+    
     res.status(201).json({
       message: 'Contact form submitted successfully',
       data: contactForm,
@@ -96,6 +107,14 @@ export const updateContactFormStatus = async (req, res) => {
 
     if (!contactForm) {
       return res.status(404).json({ error: 'Contact form not found' });
+    }
+
+    // Emit real-time event for contact form status update
+    const io = req.app.get('io');
+    if (io) {
+      emitContactFormEvent(io, 'statusUpdated', {
+        ...contactForm.toObject(),
+      });
     }
 
     res.status(200).json({

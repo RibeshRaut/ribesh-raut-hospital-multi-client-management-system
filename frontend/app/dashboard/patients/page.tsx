@@ -79,7 +79,7 @@ export default function PatientsPage() {
       }
 
       const response = await patientAPI.getByHospital(hospitalId);
-      setPatients(response.data || []);
+      setPatients((response.data as Patient[]) || []);
     } catch (err: any) {
       console.error("Error fetching patients:", err);
       setError(err.message || "Failed to load patients");
@@ -104,7 +104,7 @@ export default function PatientsPage() {
       
       if (hospitalId && patient.email) {
         const response = await patientAPI.getHistory(hospitalId, patient.email);
-        setPatientHistory(response.data || []);
+        setPatientHistory((response.data as any[]) || []);
       }
     } catch (err) {
       console.error("Error fetching patient history:", err);
@@ -420,12 +420,13 @@ export default function PatientsPage() {
 
       {/* Patient Detail Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent 
+          title="Patient Details"
+          className="sm:max-w-[600px]"
+        >
           {selectedPatient && (
             <>
-              <DialogHeader>
-                <DialogTitle>Patient Details</DialogTitle>
-              </DialogHeader>
+              <DialogHeader></DialogHeader>
               <div className="space-y-6">
                 <div className="flex items-start gap-4">
                   <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">

@@ -112,6 +112,22 @@ export const authAPI = {
       skipAuth: true,
     });
   },
+
+  forgotPassword: async (email: string, userType: 'hospital' | 'admin') => {
+    return fetchAPI('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, userType }),
+      skipAuth: true,
+    });
+  },
+
+  resetPassword: async (token: string, password: string, confirmPassword: string, userType: 'hospital' | 'admin') => {
+    return fetchAPI('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password, confirmPassword, userType }),
+      skipAuth: true,
+    });
+  },
 };
 
 // Doctor API calls
@@ -661,6 +677,90 @@ export const superAdminAPI = {
   },
 };
 
+// Payment API calls (Stripe integration)
+export const paymentAPI = {
+  // Create a Stripe checkout session for appointment booking
+  createCheckoutSession: async (appointmentData: {
+    doctorId: string;
+    hospitalId: string;
+    appointmentDate: string;
+    appointmentTime: string;
+    patientName: string;
+    patientEmail: string;
+    patientPhone: string;
+    reason?: string;
+    duration?: number;
+  }) => {
+    return fetchAPI('/payments/create-checkout-session', {
+      method: 'POST',
+      body: JSON.stringify(appointmentData),
+      skipAuth: true,
+    });
+  },
+
+  // Get payment status for an appointment
+  getPaymentStatus: async (appointmentId: string) => {
+    return fetchAPI(`/payments/status/${appointmentId}`, {
+      method: 'GET',
+      skipAuth: true,
+    });
+  },
+
+  // Verify a Stripe session
+  verifySession: async (sessionId: string) => {
+    return fetchAPI(`/payments/verify/${sessionId}`, {
+      method: 'GET',
+      skipAuth: true,
+    });
+  },
+};
+
+// Subscription API calls (Stripe subscriptions)
+export const subscriptionAPI = {
+  // Get available subscription plans
+  getAvailablePlans: async () => {
+    return fetchAPI('/subscriptions/plans', {
+      method: 'GET',
+      skipAuth: true,
+    });
+  },
+
+  // Create subscription checkout session
+  createCheckoutSession: async (subscriptionData: {
+    hospitalId: string;
+    planType: 'basic' | 'professional' | 'enterprise';
+    hospitalEmail: string;
+    hospitalName: string;
+  }) => {
+    return fetchAPI('/subscriptions/create-checkout-session', {
+      method: 'POST',
+      body: JSON.stringify(subscriptionData),
+    });
+  },
+
+  // Get subscription details for a hospital
+  getSubscriptionDetails: async (hospitalId: string) => {
+    return fetchAPI(`/subscriptions/details/${hospitalId}`, {
+      method: 'GET',
+    });
+  },
+
+  // Cancel subscription
+  cancelSubscription: async (hospitalId: string) => {
+    return fetchAPI(`/subscriptions/cancel/${hospitalId}`, {
+      method: 'POST',
+    });
+  },
+
+  // Update subscription plan
+  updatePlan: async (hospitalId: string, newPlanType: 'basic' | 'professional' | 'enterprise') => {
+    return fetchAPI(`/subscriptions/update-plan/${hospitalId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ newPlanType }),
+    });
+  },
+};
+
 // Utility functions for token management
 export const tokenManager = {
   setToken: (token: string) => {
@@ -681,6 +781,7 @@ export const tokenManager = {
       localStorage.removeItem('token');
     }
   },
+
 
   isTokenValid: () => {
     const token = tokenManager.getToken();

@@ -8,6 +8,12 @@ export const setupSocketIO = (io) => {
   io.on('connection', (socket) => {
     console.log('New socket connection:', socket.id);
 
+    // Add appointment room handlers
+    addAppointmentRoomHandlers(socket);
+
+    // Add contact form room handlers
+    addContactFormRoomHandlers(socket);
+
     // Super admin joins for real-time updates
     socket.on('superAdmin:join', () => {
       socket.join('super-admin');
@@ -308,4 +314,93 @@ const notifyAdminOfWaitingChats = async (io, hospitalId) => {
   } catch (error) {
     console.error('Error notifying admin of waiting chats:', error);
   }
+};
+
+// Export helper functions for use in controllers
+export const emitAppointmentEvent = (io, event, data) => {
+  const { hospitalId, doctorId } = data;
+  
+  // Emit to hospital admins
+  if (hospitalId) {
+    io.to(`hospital:${hospitalId}`).emit(`appointment:${event}`, data);
+  }
+  
+  // Emit to specific doctor
+  if (doctorId) {
+    io.to(`doctor:${doctorId}`).emit(`appointment:${event}`, data);
+  }
+  
+  // Emit to super admin
+  io.to('super-admin').emit(`appointment:${event}`, data);
+};
+
+export const emitContactFormEvent = (io, event, data) => {
+  const { hospitalId } = data;
+  
+  // Emit to hospital admins
+  if (hospitalId) {
+    io.to(`hospital:${hospitalId}`).emit(`contactForm:${event}`, data);
+  }
+  
+  // Emit to super admin
+  io.to('super-admin').emit(`contactForm:${event}`, data);
+};
+
+export const emitPaymentEvent = (io, event, data) => {
+  const { hospitalId, userId } = data;
+  
+  // Emit to hospital admins
+  if (hospitalId) {
+    io.to(`hospital:${hospitalId}`).emit(`payment:${event}`, data);
+  }
+  
+  // Emit to user
+  if (userId) {
+    io.to(`user:${userId}`).emit(`payment:${event}`, data);
+  }
+  
+  // Emit to super admin
+  io.to('super-admin').emit(`payment:${event}`, data);
+};
+
+// Add room join handlers for appointments
+export const addAppointmentRoomHandlers = (socket) => {
+  socket.on('appointment:join', ({ hospitalId, doctorId, userId }) => {
+    if (hospitalId) {
+      socket.join(`hospital:${hospitalId}`);
+    }
+    if (doctorId) {
+      socket.join(`doctor:${doctorId}`);
+    }
+    if (userId) {
+      socket.join(`user:${userId}`);
+    }
+  });
+
+  socket.on('appointment:leave', ({ hospitalId, doctorId, userId }) => {
+    if (hospitalId) {
+      socket.leave(`hospital:${hospitalId}`);
+    }
+    if (doctorId) {
+      socket.leave(`doctor:${doctorId}`);
+    }
+    if (userId) {
+      socket.leave(`user:${userId}`);
+    }
+  });
+};
+
+// Add room join handlers for contact forms
+export const addContactFormRoomHandlers = (socket) => {
+  socket.on('contactForm:join', ({ hospitalId }) => {
+    if (hospitalId) {
+      socket.join(`hospital:${hospitalId}`);
+    }
+  });
+
+  socket.on('contactForm:leave', ({ hospitalId }) => {
+    if (hospitalId) {
+      socket.leave(`hospital:${hospitalId}`);
+    }
+  });
 };

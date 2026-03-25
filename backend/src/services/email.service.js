@@ -362,3 +362,222 @@ export const sendAppointmentCancellationToDoctor = async (emailData) => {
     };
   }
 };
+
+// Send password reset email
+export const sendPasswordResetEmail = async (emailData) => {
+  try {
+    const {
+      email,
+      resetToken,
+      userType = 'hospital', // 'hospital' or 'admin'
+    } = emailData;
+
+    const transporter = createTransporter();
+
+    // Construct reset URL based on user type
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resetUrl = `${baseUrl}/reset-password?token=${resetToken}&type=${userType}`;
+
+    const htmlTemplate = `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+        <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 40px 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0; color: white; font-size: 28px; font-weight: 600;">Password Reset Request</h1>
+          <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">We received a request to reset your password</p>
+        </div>
+        
+        <div style="padding: 40px 30px; color: #333;">
+          <p style="margin: 0 0 20px 0; font-size: 14px; color: #666;">Hello,</p>
+          <p style="margin: 0 0 20px 0; font-size: 14px; color: #666; line-height: 1.6;">
+            You have requested to reset your password. Please click the button below to reset your password. This link will expire in 1 hour.
+          </p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="background-color: #3b82f6; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; display: inline-block;">Reset Password</a>
+          </div>
+          
+          <p style="margin: 20px 0; font-size: 13px; color: #999;">Or copy and paste this link in your browser:</p>
+          <p style="margin: 10px 0; word-break: break-all; font-size: 12px; color: #3b82f6; border: 1px solid #e5e7eb; padding: 15px; border-radius: 6px; background-color: #f9fafb; font-family: monospace;">${resetUrl}</p>
+          
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+          
+          <p style="margin: 10px 0; font-size: 13px; color: #999;">If you didn't request this, you can safely ignore this email.</p>
+          <p style="margin: 10px 0; font-size: 13px; color: #999;">This link will expire in 1 hour for security reasons.</p>
+        </div>
+        
+        <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e5e7eb;">
+          <p style="margin: 0; font-size: 12px; color: #666;">© 2026 Healthcare Management System. All rights reserved.</p>
+        </div>
+      </div>
+    `;
+
+    const mailOptions = {
+      from: process.env.GMAIL_USER,
+      to: email,
+      subject: 'Password Reset Request - Healthcare Management System',
+      html: htmlTemplate,
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+
+    return {
+      success: true,
+      messageId: result.messageId,
+      message: 'Password reset email sent successfully',
+    };
+  } catch (error) {
+    console.error('Error sending password reset email:', error);
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to send password reset email',
+    };
+  }
+};
+
+// Send payment receipt email to patient
+export const sendPaymentReceiptToPatient = async (emailData) => {
+  try {
+    const {
+      patientName,
+      patientEmail,
+      appointmentDate,
+      doctorName,
+      hospitalName,
+      consultationFee,
+      paymentAmount,
+      transactionId,
+    } = emailData;
+
+    const transporter = createTransporter();
+
+    const formattedDate = new Date(appointmentDate).toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const remainingAmount = consultationFee - paymentAmount;
+
+    const htmlTemplate = `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+        <div style="background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%); padding: 40px 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <table width="80" height="80" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 15px; background-color: rgba(255,255,255,0.2); border-radius: 50%;">
+            <tr>
+              <td align="center" valign="middle" style="font-size: 40px; color: white; line-height: 80px;">💳</td>
+            </tr>
+          </table>
+          <h1 style="margin: 0; color: white; font-size: 28px; font-weight: 600;">Payment Receipt</h1>
+          <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Your appointment payment has been processed</p>
+        </div>
+        
+        <div style="padding: 40px 30px; background-color: #ffffff; border: 1px solid #e5e7eb; border-top: none;">
+          <p style="font-size: 18px; color: #374151; margin: 0 0 25px 0;">Dear <strong>${patientName}</strong>,</p>
+          
+          <p style="color: #6b7280; line-height: 1.7; margin: 0 0 30px 0;">
+            Thank you for your payment! We have received your advance payment for your appointment. 
+            Please find your payment receipt and details below.
+          </p>
+          
+          <div style="background: linear-gradient(135deg, #f0f9ff 0%, #dbeafe 100%); border-radius: 12px; padding: 25px; margin: 0 0 30px 0;">
+            <h3 style="margin: 0 0 20px 0; color: #0c4a6e; font-size: 16px; text-transform: uppercase; letter-spacing: 1px;">📋 Payment Details</h3>
+            
+            <table style="width: 100%; color: #374151; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(12, 74, 110, 0.1); font-weight: 600; width: 140px; color: #0c4a6e;">Transaction ID</td>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(12, 74, 110, 0.1); font-size: 15px; font-family: monospace; word-break: break-all;">${transactionId}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(12, 74, 110, 0.1); font-weight: 600; color: #0c4a6e;">Doctor</td>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(12, 74, 110, 0.1);">Dr. ${doctorName || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(12, 74, 110, 0.1); font-weight: 600; color: #0c4a6e;">Appointment Date</td>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(12, 74, 110, 0.1);">${formattedDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(12, 74, 110, 0.1); font-weight: 600; color: #0c4a6e;">Hospital</td>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(12, 74, 110, 0.1);">${hospitalName || 'N/A'}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 25px; margin: 0 0 30px 0;">
+            <h3 style="margin: 0 0 20px 0; color: #92400e; font-size: 16px; text-transform: uppercase; letter-spacing: 1px;">💰 Amount Details</h3>
+            
+            <table style="width: 100%; color: #374151; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(146, 64, 14, 0.1); font-weight: 600; width: 140px; color: #92400e;">Total Consultation Fee</td>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(146, 64, 14, 0.1); font-size: 15px; text-align: right;">$${consultationFee.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(146, 64, 14, 0.1); font-weight: 600; color: #92400e;">Amount Paid Today (50%)</td>
+                <td style="padding: 12px 0; border-bottom: 1px solid rgba(146, 64, 14, 0.1); font-size: 15px; text-align: right; color: #059669; font-weight: 600;">$${paymentAmount.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; font-weight: 600; color: #92400e;">Remaining Balance (50%)</td>
+                <td style="padding: 12px 0; font-size: 15px; text-align: right; color: #dc2626; font-weight: 600;">$${remainingAmount.toFixed(2)}</td>
+              </tr>
+            </table>
+          </div>
+          
+          <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 20px; margin: 0 0 30px 0; border-radius: 0 8px 8px 0;">
+            <h4 style="margin: 0 0 10px 0; color: #166534; font-size: 14px;">✅ Payment Status</h4>
+            <p style="margin: 0; color: #166534; line-height: 1.8;">Your half payment of <strong>$${paymentAmount.toFixed(2)}</strong> has been successfully processed. The remaining <strong>$${remainingAmount.toFixed(2)}</strong> will be due on or before your appointment date.</p>
+          </div>
+          
+          <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin: 0 0 30px 0; border-radius: 0 8px 8px 0;">
+            <h4 style="margin: 0 0 10px 0; color: #991b1b; font-size: 14px;">⚠️ Important</h4>
+            <ul style="margin: 0; padding: 0 0 0 20px; color: #991b1b; line-height: 1.8; font-size: 14px;">
+              <li>Please save this receipt for your records</li>
+              <li>Remaining balance must be paid before or at the time of appointment</li>
+              <li>Visit the hospital 15 minutes before your scheduled time</li>
+            </ul>
+          </div>
+          
+          <p style="color: #6b7280; margin: 0 0 20px 0; line-height: 1.7;">
+            If you have any questions regarding your payment or appointment, please contact the hospital directly.
+          </p>
+          
+          <p style="color: #374151; margin: 0;">
+            Best regards,<br/>
+            <strong>${hospitalName}</strong>
+          </p>
+        </div>
+        
+        <div style="background-color: #f9fafb; padding: 25px 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; text-align: center;">
+          <p style="color: #9ca3af; font-size: 12px; margin: 0 0 5px 0;">
+            This is an automated email from the Hospital Management System.
+          </p>
+          <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+            © ${new Date().getFullYear()} Hospital Management Tenant. All rights reserved.
+          </p>
+        </div>
+      </div>
+    `;
+
+    const mailOptions = {
+      from: process.env.GMAIL_USER,
+      to: patientEmail,
+      subject: `💳 Payment Receipt - Appointment with Dr. ${doctorName}`,
+      html: htmlTemplate,
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+
+    return {
+      success: true,
+      messageId: result.messageId,
+      message: 'Payment receipt email sent successfully',
+    };
+  } catch (error) {
+    console.error('Error sending payment receipt email:', error);
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to send payment receipt email',
+    };
+  }
+};

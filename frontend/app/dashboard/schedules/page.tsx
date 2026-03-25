@@ -371,11 +371,11 @@ export default function SchedulesPage() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent 
+          title={editingSchedule ? "Edit Schedule" : "Add New Schedule"}
+          className="sm:max-w-[500px]"
+        >
           <DialogHeader>
-            <DialogTitle>
-              {editingSchedule ? "Edit Schedule" : "Add New Schedule"}
-            </DialogTitle>
             <DialogDescription>
               {editingSchedule
                 ? "Update the schedule details below."
@@ -504,9 +504,11 @@ export default function SchedulesPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent 
+          title="Delete Schedule"
+          className="sm:max-w-[400px]"
+        >
           <DialogHeader>
-            <DialogTitle>Delete Schedule</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete this schedule? This action cannot be undone.
             </DialogDescription>

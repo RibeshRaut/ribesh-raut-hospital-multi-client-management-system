@@ -70,22 +70,22 @@ export default function LoginPage() {
       const response = await authAPI.login(formData.identifier, formData.password);
       console.log("Login response:", response);
 
-      if (response.data && response.data.token) {
+      if (response.data && (response.data as any).token) {
         // Store token and user info
-        tokenManager.setToken(response.data.token);
+        tokenManager.setToken((response.data as any).token);
         
         const userInfo = {
-          id: response.data.user?.id,
-          hospitalId: response.data.user?.hospitalId || response.data.user?.id,
-          userType: response.data.userType,
-          ...response.data.user,
+          id: (response.data as any).user?.id,
+          hospitalId: (response.data as any).user?.hospitalId || (response.data as any).user?.id,
+          userType: (response.data as any).userType,
+          ...(response.data as any).user,
         };
         console.log("Storing userInfo:", userInfo);
         localStorage.setItem("userInfo", JSON.stringify(userInfo));
 
         // Redirect based on user type
-        console.log("Redirecting based on user type:", response.data.userType);
-        if (response.data.userType === "website_admin") {
+        console.log("Redirecting based on user type:", (response.data as any).userType);
+        if ((response.data as any).userType === "website_admin") {
           router.push("/super-admin");
         } else {
           router.push("/dashboard");
@@ -154,7 +154,7 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <Link href="#" className="text-sm text-primary font-medium">
+                <Link href="/forgot-password" className="text-sm text-primary font-medium hover:underline">
                   Forgot password?
                 </Link>
               </div>

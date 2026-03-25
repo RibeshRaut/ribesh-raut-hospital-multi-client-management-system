@@ -11,6 +11,7 @@ import {
   sendAppointmentCancellationToDoctor,
   sendAppointmentConfirmationToPatient,
 } from '../services/email.service.js';
+import { emitAppointmentEvent } from '../socket.js';
 
 export const createAppointmentRequest = async (req, res) => {
   try {
@@ -104,6 +105,17 @@ export const createAppointmentRequest = async (req, res) => {
 
     // Populate doctor details
     await appointment.populate('doctorId');
+
+    // Emit real-time event to notify admins and doctors
+    const io = req.app.get('io');
+    if (io) {
+      emitAppointmentEvent(io, 'created', {
+        ...appointment.toObject(),
+        hospitalId,
+        doctorId,
+        status: 'pending',
+      });
+    }
 
     res.status(201).json({
       message: 'Appointment request created successfully',
@@ -268,6 +280,15 @@ export const updateAppointmentStatus = async (req, res) => {
       }
     }
 
+    // Emit real-time event for appointment status update
+    const io = req.app.get('io');
+    if (io) {
+      emitAppointmentEvent(io, 'statusUpdated', {
+        ...updatedAppointment.toObject(),
+        status: normalizedStatus,
+      });
+    }
+
     res.status(200).json({
       message: 'Appointment status updated successfully',
       data: updatedAppointment,
@@ -317,6 +338,15 @@ export const cancelAppointment = async (req, res) => {
 
       sendAppointmentCancellationToDoctor(emailData).catch((err) => {
         console.error('Failed to send cancellation email:', err);
+      });
+    }
+
+    // Emit real-time event for appointment cancellation
+    const io = req.app.get('io');
+    if (io) {
+      emitAppointmentEvent(io, 'cancelled', {
+        ...updatedAppointment.toObject(),
+        status: 'cancelled',
       });
     }
 
