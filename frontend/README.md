@@ -1,5 +1,29 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Run Tests
+
+Run all frontend tests with one command:
+
+```bash
+npm test
+```
+
+This runs the full frontend Vitest suite with readable output.
+
+## Screenshot-Friendly Test Output
+
+Each test run also saves output to:
+
+- `test-results/latest.log` (latest run)
+- `test-results/frontend-tests-YYYY-MM-DDTHH-MM-SS-sssZ.log` (timestamped archive)
+
+Optional commands:
+
+```bash
+npm run test:all       # same as npm test
+npm run test:all:raw   # direct vitest output
+```
+
 ## Getting Started
 
 First, run the development server:

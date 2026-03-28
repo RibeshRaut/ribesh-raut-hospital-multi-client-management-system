@@ -207,6 +207,22 @@ export default function HospitalPublicPage() {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    const confirmPaidAppointment = async () => {
+      if (paymentStatus !== 'success' || !paymentAppointmentId) {
+        return;
+      }
+
+      try {
+        await paymentAPI.confirmPaidAppointment(paymentAppointmentId);
+      } catch (error) {
+        console.error('Failed to confirm paid appointment after redirect:', error);
+      }
+    };
+
+    confirmPaidAppointment();
+  }, [paymentStatus, paymentAppointmentId]);
+
   // Background carousel effect
   useEffect(() => {
     if (!hospital?.images || hospital.images.length === 0) return;

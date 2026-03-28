@@ -764,6 +764,14 @@ export const paymentAPI = {
       skipAuth: true,
     });
   },
+
+  // Confirm appointment after successful payment (webhook fallback)
+  confirmPaidAppointment: async (appointmentId: string) => {
+    return fetchAPI(`/payments/confirm/${appointmentId}`, {
+      method: 'POST',
+      skipAuth: true,
+    });
+  },
 };
 
 // Subscription API calls (Stripe subscriptions)
