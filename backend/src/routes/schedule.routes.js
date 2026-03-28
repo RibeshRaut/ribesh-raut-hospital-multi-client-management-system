@@ -9,18 +9,22 @@ import {
   getPublicSchedulesByHospital,
 } from '../controllers/schedule.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
+import {
+  requireHospitalSubscription,
+  requireSubscriptionByHospitalParam,
+} from '../middlewares/subscription.middleware.js';
 
 const router = express.Router();
 
 // Public routes (no auth required)
-router.get('/public/hospital/:hospitalId', getPublicSchedulesByHospital);
+router.get('/public/hospital/:hospitalId', requireSubscriptionByHospitalParam, getPublicSchedulesByHospital);
 
 // Protected routes
-router.post('/', authenticate, createSchedule);
-router.get('/hospital/:hospitalId', authenticate, getSchedulesByHospital);
-router.get('/doctor/:doctorId', authenticate, getScheduleByDoctor);
-router.get('/:scheduleId', authenticate, getScheduleById);
-router.put('/:scheduleId', authenticate, updateSchedule);
-router.delete('/:scheduleId', authenticate, deleteSchedule);
+router.post('/', authenticate, requireHospitalSubscription, createSchedule);
+router.get('/hospital/:hospitalId', authenticate, requireHospitalSubscription, getSchedulesByHospital);
+router.get('/doctor/:doctorId', authenticate, requireHospitalSubscription, getScheduleByDoctor);
+router.get('/:scheduleId', authenticate, requireHospitalSubscription, getScheduleById);
+router.put('/:scheduleId', authenticate, requireHospitalSubscription, updateSchedule);
+router.delete('/:scheduleId', authenticate, requireHospitalSubscription, deleteSchedule);
 
 export default router;

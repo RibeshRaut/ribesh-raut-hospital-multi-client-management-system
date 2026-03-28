@@ -171,7 +171,10 @@ export const sendMessage = async (hospitalId, sessionId, userMessage, userName =
     }));
 
     const ai = initializeGenAI();
-    const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const model = ai.getGenerativeModel({ 
+      model: 'gemini-2.5-flash-lite',
+      systemInstruction: context,
+    });
 
     const chat = model.startChat({
       history: conversationHistory,
@@ -181,7 +184,7 @@ export const sendMessage = async (hospitalId, sessionId, userMessage, userName =
       },
     });
 
-    const fullMessage = `${context}\n\nUser: ${userMessage}`;
+    const fullMessage = userMessage;
 
     let result;
     let retries = 2;

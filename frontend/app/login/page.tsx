@@ -82,6 +82,8 @@ export default function LoginPage() {
         };
         console.log("Storing userInfo:", userInfo);
         localStorage.setItem("userInfo", JSON.stringify(userInfo));
+        // Also store userInfo in cookie for middleware access
+        document.cookie = `userInfo=${encodeURIComponent(JSON.stringify(userInfo))}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
 
         // Redirect based on user type
         console.log("Redirecting based on user type:", (response.data as any).userType);

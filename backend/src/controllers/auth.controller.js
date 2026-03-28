@@ -8,6 +8,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { sendPasswordResetEmail } from '../services/email.service.js';
+import PlatformSettings from '../models/platform.model.js';
+import { notifySuperAdmins } from '../services/adminNotification.service.js';
+import { createTrialWindow } from '../services/subscription.service.js';
 
 export const login = async (req, res) => {
   try {
@@ -128,6 +131,14 @@ export const registerWebsiteAdmin = async (req, res) => {
 
 export const registerHospitalAdmin = async (req, res) => {
   try {
+    const escapeHtml = (value) =>
+      String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
     const { error, value } = hospitalAdminRegisterSchema.validate(req.body);
     if (error) {
       const messages = error.details.map((detail) => detail.message);
@@ -135,6 +146,12 @@ export const registerHospitalAdmin = async (req, res) => {
     }
 
     const { name, email, phone, address, password } = value;
+    const { trialStartDate, trialEndDate } = createTrialWindow();
+
+    const platformSettings = await PlatformSettings.findOne();
+    if (platformSettings && platformSettings.allowNewRegistrations === false) {
+      return res.status(403).json({ error: 'New hospital registrations are currently disabled' });
+    }
 
     const existingHospital = await Hospital.findOne({ email });
     if (existingHospital) {
@@ -147,8 +164,33 @@ export const registerHospitalAdmin = async (req, res) => {
       phone,
       address,
       password,
+      subscriptionStatus: 'trial',
+      trialStartDate,
+      trialEndDate,
+      trialUsed: true,
     });
     await newHospital.save();
+
+    const safeName = escapeHtml(newHospital.name);
+    const safeEmail = escapeHtml(newHospital.email);
+    const safePhone = escapeHtml(newHospital.phone || 'Not provided');
+    const safeAddress = escapeHtml(newHospital.address || 'Not provided');
+
+    await notifySuperAdmins({
+      requiredSetting: 'newHospitalRegistration',
+      subject: `New Hospital Registration: ${newHospital.name}`,
+      text: `A new hospital has registered. Name: ${newHospital.name}, Email: ${newHospital.email}, Phone: ${newHospital.phone || 'Not provided'}, Address: ${newHospital.address || 'Not provided'}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
+          <h2 style="margin-bottom: 12px;">New Hospital Registration</h2>
+          <p style="margin: 0 0 8px;"><strong>Name:</strong> ${safeName}</p>
+          <p style="margin: 0 0 8px;"><strong>Email:</strong> ${safeEmail}</p>
+          <p style="margin: 0 0 8px;"><strong>Phone:</strong> ${safePhone}</p>
+          <p style="margin: 0 0 8px;"><strong>Address:</strong> ${safeAddress}</p>
+          <p style="margin: 0;"><strong>Registered At:</strong> ${new Date(newHospital.createdAt).toLocaleString()}</p>
+        </div>
+      `,
+    });
 
     const token = jwt.sign(
       {

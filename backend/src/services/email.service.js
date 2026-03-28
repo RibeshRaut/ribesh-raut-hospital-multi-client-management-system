@@ -1,13 +1,77 @@
 import nodemailer from 'nodemailer';
 
+const EMAIL_FROM = process.env.EMAIL_FROM || process.env.GMAIL_USER;
+
 const createTransporter = () => {
+  if (process.env.SMTP_HOST) {
+    const smtpPort = Number(process.env.SMTP_PORT || 587);
+    const smtpUser = process.env.SMTP_USER?.trim();
+    const smtpPass = process.env.SMTP_PASS?.trim();
+
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+    });
+  }
+
+  const gmailUser = process.env.GMAIL_USER?.trim();
+  const gmailAppPassword = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+
   return nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD,
+      user: gmailUser,
+      pass: gmailAppPassword,
     },
   });
+};
+
+export const sendSuperAdminNotificationEmail = async ({ to, subject, html, text }) => {
+  try {
+    const recipients = Array.isArray(to) ? to : [to];
+    const validRecipients = recipients.filter(Boolean);
+
+    if (!validRecipients.length) {
+      return {
+        success: false,
+        error: 'No recipients provided',
+        message: 'No recipients provided',
+      };
+    }
+
+    const transporter = createTransporter();
+
+    const result = await transporter.sendMail({
+      from: EMAIL_FROM,
+      to: validRecipients.join(', '),
+      subject,
+      text,
+      html,
+    });
+
+    return {
+      success: true,
+      messageId: result.messageId,
+      message: 'Super admin notification email sent successfully',
+    };
+  } catch (error) {
+    const isAuthError = error?.code === 'EAUTH' || error?.responseCode === 535;
+    const actionableMessage = isAuthError
+      ? 'Email authentication failed. Verify SMTP/Gmail credentials and regenerate app password if needed.'
+      : 'Failed to send super admin notification email';
+
+    console.error('Error sending super admin notification email:', error);
+    return {
+      success: false,
+      error: actionableMessage,
+      message: actionableMessage,
+    };
+  }
 };
 
 // Send confirmation email to PATIENT when appointment is confirmed
@@ -118,7 +182,7 @@ export const sendAppointmentConfirmationToPatient = async (emailData) => {
     `;
 
     const mailOptions = {
-      from: process.env.GMAIL_USER,
+      from: EMAIL_FROM,
       to: patientEmail,
       subject: `✅ Appointment Confirmed - ${hospitalName}`,
       html: htmlTemplate,
@@ -245,7 +309,7 @@ export const sendAppointmentConfirmationToDoctor = async (emailData) => {
     `;
 
     const mailOptions = {
-      from: process.env.GMAIL_USER,
+      from: EMAIL_FROM,
       to: doctorEmail,
       subject: `Appointment Confirmed - ${patientName}`,
       html: htmlTemplate,
@@ -340,7 +404,7 @@ export const sendAppointmentCancellationToDoctor = async (emailData) => {
     `;
 
     const mailOptions = {
-      from: process.env.GMAIL_USER,
+      from: EMAIL_FROM,
       to: doctorEmail,
       subject: `Appointment Cancelled - ${patientName}`,
       html: htmlTemplate,
@@ -411,7 +475,7 @@ export const sendPasswordResetEmail = async (emailData) => {
     `;
 
     const mailOptions = {
-      from: process.env.GMAIL_USER,
+      from: EMAIL_FROM,
       to: email,
       subject: 'Password Reset Request - Healthcare Management System',
       html: htmlTemplate,
@@ -559,7 +623,7 @@ export const sendPaymentReceiptToPatient = async (emailData) => {
     `;
 
     const mailOptions = {
-      from: process.env.GMAIL_USER,
+      from: EMAIL_FROM,
       to: patientEmail,
       subject: `💳 Payment Receipt - Appointment with Dr. ${doctorName}`,
       html: htmlTemplate,

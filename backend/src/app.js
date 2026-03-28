@@ -14,7 +14,9 @@ import scheduleRoutes from './routes/schedule.routes.js';
 import superAdminRoutes from './routes/superAdmin.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import subscriptionRoutes from './routes/subscription.routes.js';
+import platformRoutes from "./routes/platform.routes.js";
 import { handleStripeWebhook } from './controllers/payment.controller.js';
+import PlatformSettings from './models/platform.model.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,6 +32,31 @@ app.use(
 // Stripe webhook endpoint - must be before express.json() middleware
 // because Stripe needs the raw body for signature verification
 app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
+
+// Maintenance mode middleware
+app.use(async (req, res, next) => {
+  const settings = await PlatformSettings.findOne();
+  if (settings?.maintenanceMode) {
+    // Routes that should always be allowed during maintenance
+    const allowedPaths = [
+      '/api/auth',           // Login/logout
+      '/api/super-admin',    // Super admin endpoints
+      '/api/platform',       // Platform settings
+      '/api/payments/webhook' // Stripe webhook
+    ];
+    
+    const isAllowed = allowedPaths.some(path => req.path.startsWith(path));
+    
+    if (!isAllowed) {
+      // Block public-facing features during maintenance
+      return res.status(503).json({
+        message:
+          "The website is currently under maintenance. Please try again later.",
+      });
+    }
+  }
+  next();
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -53,6 +80,7 @@ app.use('/api/schedules', scheduleRoutes);
 app.use('/api/super-admin', superAdminRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.use("/api/platform", platformRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

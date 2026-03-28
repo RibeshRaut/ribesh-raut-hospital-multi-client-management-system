@@ -24,12 +24,12 @@ import {
   Check,
   Trash2,
   MessageCircle,
+  CreditCard,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/popover";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { tokenManager } from "@/lib/api";
+import { subscriptionAPI, tokenManager } from "@/lib/api";
 import { NotificationProvider, useNotifications, Notification } from "@/lib/notification-context";
 
 const sidebarLinks = [
@@ -84,6 +84,11 @@ const sidebarLinks = [
     label: "Live Chat",
     icon: MessageCircle,
   },
+  {
+    href: "/dashboard/billing",
+    label: "Billing",
+    icon: CreditCard,
+  },
 ];
 
 const bottomLinks = [
@@ -96,6 +101,7 @@ const bottomLinks = [
 
 interface UserInfo {
   id: string;
+  hospitalId?: string;
   userType: string;
   name?: string;
   email?: string;
@@ -184,7 +190,7 @@ export default function DashboardLayout({
     <NotificationProvider>
       <DashboardContent
         pathname={pathname}
-        userInfo={userInfo}
+        hospitalId={userInfo?.hospitalId || userInfo?.id || ""}
         displayName={displayName}
         displayEmail={displayEmail}
         initials={initials}
@@ -310,7 +316,7 @@ function NotificationBell() {
 // Dashboard Content Component (needs to be inside NotificationProvider)
 function DashboardContent({
   pathname,
-  userInfo,
+  hospitalId,
   displayName,
   displayEmail,
   initials,
@@ -319,7 +325,7 @@ function DashboardContent({
   children,
 }: {
   pathname: string;
-  userInfo: UserInfo | null;
+  hospitalId: string;
   displayName: string;
   displayEmail: string;
   initials: string;
@@ -328,6 +334,61 @@ function DashboardContent({
   children: React.ReactNode;
 }) {
   const { pendingAppointmentsCount, waitingChatsCount } = useNotifications();
+  const [subscriptionNotice, setSubscriptionNotice] = useState<
+    | {
+        type: "trial" | "blocked";
+        message: string;
+      }
+    | null
+  >(null);
+
+  useEffect(() => {
+    const loadSubscriptionNotice = async () => {
+      if (!hospitalId || pathname.startsWith("/dashboard/billing")) {
+        setSubscriptionNotice(null);
+        return;
+      }
+
+      try {
+        const response = await subscriptionAPI.getSubscriptionDetails(hospitalId);
+        const details = response.data as {
+          hasAccess?: boolean;
+          isTrialActive?: boolean;
+          trialEndDate?: string | null;
+        };
+
+        if (details?.hasAccess === false) {
+          setSubscriptionNotice({
+            type: "blocked",
+            message: "Subscription is required to continue using dashboard features.",
+          });
+          return;
+        }
+
+        if (details?.isTrialActive && details?.trialEndDate) {
+          const end = new Date(details.trialEndDate).getTime();
+          const daysLeft = Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24));
+          if (daysLeft >= 0) {
+            setSubscriptionNotice({
+              type: "trial",
+              message:
+                daysLeft > 0
+                  ? `${daysLeft} day${daysLeft === 1 ? "" : "s"} left in your trial. Upgrade any time to avoid interruption.`
+                  : "Your trial ends today. Upgrade now to avoid interruption.",
+            });
+            return;
+          }
+        }
+
+        setSubscriptionNotice(null);
+      } catch {
+        setSubscriptionNotice(null);
+      }
+    };
+
+    loadSubscriptionNotice();
+  }, [hospitalId, pathname]);
+
   return (
     <div className="min-h-screen flex bg-secondary">
       {/* Sidebar */}
@@ -472,8 +533,6 @@ function DashboardContent({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem>
                     <Link href="/dashboard/settings" className="flex w-full">
                       Settings
@@ -490,7 +549,7 @@ function DashboardContent({
 
           {/* Onboarding Alert */}
           {needsOnboarding && pathname === "/dashboard" && (
-            <div className="px-6 py-3 bg-blue-50 border-t border-blue-200">
+            <div className="px-6 py-3 bg-blue-50 border-t border-blue-200 flex items-center">
               <Alert className="bg-transparent border-0 p-0">
                 <AlertCircle className="h-4 w-4 text-blue-600" />
                 <AlertDescription className="ml-2 text-sm text-blue-700">
@@ -500,6 +559,32 @@ function DashboardContent({
                     className="font-semibold underline"
                   >
                     Complete Now
+                  </Link>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          {subscriptionNotice && (
+            <div
+              className={`px-6 py-3 border-t flex items-center ${
+                subscriptionNotice.type === "blocked"
+                  ? "bg-red-50 border-red-200"
+                  : "bg-amber-50 border-amber-200"
+              }`}
+            >
+              <Alert className="bg-transparent border-0 p-0 flex items-center">
+                
+                <AlertDescription
+                  className={`ml-2 text-sm ${
+                    subscriptionNotice.type === "blocked"
+                      ? "text-red-700"
+                      : "text-amber-700"
+                  }`}
+                >
+                  {subscriptionNotice.message}{" "}
+                  <Link href="/dashboard/billing" className="font-semibold underline">
+                    Manage Billing
                   </Link>
                 </AlertDescription>
               </Alert>

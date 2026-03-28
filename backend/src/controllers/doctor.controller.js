@@ -1,4 +1,9 @@
 import Doctor from '../models/doctor.model.js';
+import Hospital from '../models/hospital.model.js';
+import {
+  evaluateAndSyncSubscriptionState,
+  validateDoctorQuota,
+} from '../services/subscription.service.js';
 
 export const createDoctor = async (req, res) => {
   try {
@@ -21,6 +26,29 @@ export const createDoctor = async (req, res) => {
 
     if (!name || !specialty || !phone || !email || !hospitalId) {
       return res.status(400).json({ error: 'Name, specialty, phone, email and hospitalId are required' });
+    }
+
+    const hospital = await Hospital.findById(hospitalId);
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital not found' });
+    }
+
+    const subscriptionContext = req.subscriptionContext || (await evaluateAndSyncSubscriptionState(hospital));
+    if (!subscriptionContext.hasAccess) {
+      return res.status(402).json({ error: subscriptionContext.reason });
+    }
+
+    const doctorQuota = await validateDoctorQuota(hospitalId, subscriptionContext.effectivePlanId);
+    if (!doctorQuota.allowed) {
+      return res.status(403).json({
+        error: doctorQuota.message,
+        code: 'DOCTOR_LIMIT_REACHED',
+        data: {
+          current: doctorQuota.current,
+          limit: doctorQuota.limit,
+          plan: subscriptionContext.effectivePlanId,
+        },
+      });
     }
 
     const doctor = new Doctor({

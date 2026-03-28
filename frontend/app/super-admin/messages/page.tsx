@@ -328,7 +328,6 @@ export default function WebsiteMessagesPage() {
               <TableRow>
                 <TableHead>Sender</TableHead>
                 <TableHead>Subject</TableHead>
-                <TableHead>Hospital</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -369,12 +368,6 @@ export default function WebsiteMessagesPage() {
                         <p className="text-sm text-muted-foreground line-clamp-1 max-w-xs">
                           {msg.message}
                         </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">{msg.hospitalName || "N/A"}</span>
                       </div>
                     </TableCell>
                     <TableCell>

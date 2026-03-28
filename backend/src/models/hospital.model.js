@@ -95,7 +95,7 @@ const hospitalSchema = new mongoose.Schema(
     // Subscription fields
     subscriptionStatus: {
       type: String,
-      enum: ['inactive', 'active', 'cancelled', 'suspended'],
+      enum: ['inactive', 'trial', 'active', 'cancelled', 'suspended', 'expired'],
       default: 'inactive',
     },
     subscriptionPlan: {
@@ -118,6 +118,18 @@ const hospitalSchema = new mongoose.Schema(
     subscriptionEndDate: {
       type: Date,
       default: null,
+    },
+    trialStartDate: {
+      type: Date,
+      default: null,
+    },
+    trialEndDate: {
+      type: Date,
+      default: null,
+    },
+    trialUsed: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

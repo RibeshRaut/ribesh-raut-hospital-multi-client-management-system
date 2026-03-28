@@ -9,10 +9,7 @@ import {
   sendAppointmentConfirmationToPatient,
 } from '../services/email.service.js';
 import { emitPaymentEvent } from '../socket.js';
-import { handleSubscriptionWebhook } from './subscription.controller.js';
-
-// Debug log for Stripe key
-console.log('Stripe Key:', process.env.STRIPE_SECRET_KEY);
+import { handleSubscriptionCheckoutCompleted, handleSubscriptionWebhook } from './subscription.controller.js';
 // Initialize Stripe with test secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_your_test_key');
 
@@ -198,6 +195,8 @@ export const createCheckoutSession = async (req, res) => {
 export const handleStripeWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const allowInsecureWebhookInDev =
+    process.env.NODE_ENV === 'development' && process.env.STRIPE_ALLOW_INSECURE_WEBHOOKS === 'true';
   const io = req.app.get('io');
 
   let event;
@@ -205,9 +204,13 @@ export const handleStripeWebhook = async (req, res) => {
   try {
     if (webhookSecret) {
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } else {
-      // For testing without webhook signature verification
+    } else if (allowInsecureWebhookInDev) {
       event = req.body;
+    } else {
+      console.error('Stripe webhook misconfiguration: STRIPE_WEBHOOK_SECRET is required.');
+      return res
+        .status(500)
+        .json({ error: 'Webhook is not configured securely. Please set STRIPE_WEBHOOK_SECRET.' });
     }
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
@@ -217,7 +220,7 @@ export const handleStripeWebhook = async (req, res) => {
   // Handle the event
   switch (event.type) {
     case 'checkout.session.completed':
-      await handlePaymentSuccess(event.data.object, io);
+      await handleCheckoutSessionCompleted(event.data.object, io);
       break;
 
     case 'checkout.session.expired':
@@ -242,6 +245,15 @@ export const handleStripeWebhook = async (req, res) => {
   }
 
   res.status(200).json({ received: true });
+};
+
+const handleCheckoutSessionCompleted = async (session, io) => {
+  if (session.mode === 'subscription') {
+    await handleSubscriptionCheckoutCompleted(session);
+    return;
+  }
+
+  await handlePaymentSuccess(session, io);
 };
 
 /**

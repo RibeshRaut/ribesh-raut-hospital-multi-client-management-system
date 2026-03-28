@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useCallback, useEffect, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,6 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -40,7 +39,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  Users,
   Activity,
   Mail,
   Phone,
@@ -48,7 +46,19 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { superAdminAPI } from "@/lib/api";
-import { useRouter } from "next/navigation";
+
+interface HospitalsResponseData {
+  hospitals?: Hospital[];
+  pagination?: Pagination;
+}
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+};
 
 interface Hospital {
   _id: string;
@@ -64,6 +74,13 @@ interface Hospital {
     appointments: number;
     services: number;
   };
+  subscription?: {
+    status?: string;
+    currentPlan?: string | null;
+    isTrialActive?: boolean;
+    trialEndDate?: string | null;
+    estimatedMonthlyRevenue?: number;
+  };
 }
 
 interface Pagination {
@@ -74,7 +91,6 @@ interface Pagination {
 }
 
 export default function HospitalsPage() {
-  const router = useRouter();
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
     total: 0,
@@ -90,11 +106,7 @@ export default function HospitalsPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    fetchHospitals();
-  }, [pagination.page, statusFilter]);
-
-  const fetchHospitals = async () => {
+  const fetchHospitals = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -106,17 +118,23 @@ export default function HospitalsPage() {
       });
 
       if (response.data) {
-        const data = response.data as any;
+        const data = response.data as HospitalsResponseData;
         setHospitals(data.hospitals || []);
-        setPagination(data.pagination || pagination);
+        if (data.pagination) {
+          setPagination(data.pagination);
+        }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching hospitals:", err);
-      setError(err.message || "Failed to load hospitals");
+      setError(getErrorMessage(err, "Failed to load hospitals"));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [pagination.page, pagination.limit, searchQuery, statusFilter]);
+
+  useEffect(() => {
+    fetchHospitals();
+  }, [fetchHospitals]);
 
   const handleSearch = () => {
     setPagination((prev) => ({ ...prev, page: 1 }));
@@ -137,10 +155,10 @@ export default function HospitalsPage() {
       await superAdminAPI.deleteHospital(selectedHospital._id);
       setShowDeleteDialog(false);
       setSelectedHospital(null);
-      fetchHospitals();
-    } catch (err: any) {
+      await fetchHospitals();
+    } catch (err: unknown) {
       console.error("Error deleting hospital:", err);
-      setError(err.message || "Failed to delete hospital");
+      setError(getErrorMessage(err, "Failed to delete hospital"));
     } finally {
       setIsDeleting(false);
     }
@@ -230,6 +248,7 @@ export default function HospitalsPage() {
                 <TableHead>Hospital</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Statistics</TableHead>
+                <TableHead>Subscription</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -279,6 +298,28 @@ export default function HospitalsPage() {
                           <Activity className="h-4 w-4 text-blue-600" />
                           <span>{hospital.stats?.services || 0}</span>
                         </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <Badge
+                          variant="secondary"
+                          className={
+                            hospital.subscription?.status === "active"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : hospital.subscription?.status === "trial"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-red-100 text-red-800"
+                          }
+                        >
+                          {(hospital.subscription?.status || "inactive").toUpperCase()}
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">
+                          Plan: {hospital.subscription?.currentPlan || "none"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Revenue: ${Number(hospital.subscription?.estimatedMonthlyRevenue || 0).toLocaleString()}/mo
+                        </p>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -332,7 +373,7 @@ export default function HospitalsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12">
+                  <TableCell colSpan={7} className="text-center py-12">
                     <Building2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                     <p className="text-muted-foreground">No hospitals found</p>
                   </TableCell>

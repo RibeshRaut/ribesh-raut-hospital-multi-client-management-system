@@ -140,6 +140,7 @@ export default function HospitalPublicPage() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [currentBgIndex, setCurrentBgIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState("overview");
 
   // Payment status from URL
   const [paymentStatus, setPaymentStatus] = useState<'success' | 'cancelled' | null>(null);
@@ -178,6 +179,19 @@ export default function HospitalPublicPage() {
   useEffect(() => {
     if (slug) fetchHospitalData();
   }, [slug]);
+
+  // Handle scroll to active tab sections
+  useEffect(() => {
+    if (activeTab === "contact") {
+      setTimeout(() => {
+        document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
+      }, 0);
+    } else if (activeTab === "doctors") {
+      setTimeout(() => {
+        document.getElementById("doctors")?.scrollIntoView({ behavior: "smooth" });
+      }, 0);
+    }
+  }, [activeTab]);
 
   // Handle payment return from Stripe
   useEffect(() => {
@@ -530,11 +544,11 @@ export default function HospitalPublicPage() {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 mb-6 md:mb-8">
-                <Button size="lg" className="bg-primary hover:bg-primary/90 text-white w-full sm:w-auto" onClick={() => document.getElementById("doctors")?.scrollIntoView({ behavior: "smooth" })}>
+                <Button size="lg" className="bg-primary hover:bg-primary/90 text-white w-full sm:w-auto" onClick={() => setActiveTab("doctors")}>
                   <CalendarIcon className="h-5 w-5 mr-2" />
                   Book Appointment
                 </Button>
-                <Button size="lg" variant="outline" className="border-white/30 text-black hover:bg-white/10 w-full sm:w-auto" onClick={() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })}>
+                <Button size="lg" variant="outline" className="border-white/30 text-black hover:bg-white/10 w-full sm:w-auto" onClick={() => setActiveTab("contact")}>
                   <Phone className="h-5 w-5 mr-2" />
                   Contact Us
                 </Button>
@@ -614,7 +628,7 @@ export default function HospitalPublicPage() {
       {/* Main Content with Tabs */}
       <section className="py-8 md:py-12 bg-secondary/30">
         <div className="container mx-auto px-4">
-          <Tabs defaultValue="overview" className="space-y-6 md:space-y-8">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6 md:space-y-8">
             <TabsList className="bg-white border shadow-sm p-1 h-auto flex flex-wrap justify-start gap-1 overflow-x-auto">
               <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-white px-3 md:px-6 py-2 md:py-2.5 text-xs md:text-sm whitespace-nowrap">Overview</TabsTrigger>
               <TabsTrigger value="doctors" className="data-[state=active]:bg-primary data-[state=active]:text-white px-3 md:px-6 py-2 md:py-2.5 text-xs md:text-sm whitespace-nowrap">Doctors</TabsTrigger>

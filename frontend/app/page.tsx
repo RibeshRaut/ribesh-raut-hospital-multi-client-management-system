@@ -94,62 +94,57 @@ const stats = [
 
 const pricingPlans = [
   {
-    name: "Gold",
-    price: "$99",
+    name: "Basic",
+    price: "$29.99",
     period: "/month",
     description: "Perfect for small clinics",
-    icon: "🥇",
+    icon: "🩺",
     color: "border-t-yellow-500",
     features: [
       "Up to 5 doctors",
-      "500 appointments/month",
+      "Up to 500 appointments / month",
       "Basic analytics",
       "Email support",
-      "Patient portal",
     ],
-    limitations: ["No AI chatbot", "No API access", "No custom branding"],
+    limitations: ["No 24/7 dedicated support"],
     cta: "Start Free Trial",
+    href: "/register",
     popular: false,
   },
   {
-    name: "Platinum",
-    price: "$299",
+    name: "Professional",
+    price: "$79.99",
     period: "/month",
     description: "For growing hospitals",
     icon: "💎",
     color: "border-t-slate-400",
     features: [
       "Up to 25 doctors",
-      "Unlimited appointments",
+      "Up to 2500 appointments / month",
       "Advanced analytics",
       "Priority support",
-      "AI chatbot",
-      "Custom branding",
-      "API access",
     ],
-    limitations: ["No multi-location", "No on-premise option"],
+    limitations: ["No 24/7 dedicated support"],
     cta: "Start Free Trial",
+    href: "/register",
     popular: true,
   },
   {
-    name: "Diamond",
-    price: "Custom",
-    period: "",
+    name: "Enterprise",
+    price: "$199.99",
+    period: "/month",
     description: "For large healthcare networks",
     icon: "👑",
     color: "border-t-cyan-400",
     features: [
       "Unlimited doctors",
       "Unlimited appointments",
-      "Custom analytics",
-      "24/7 dedicated support",
-      "Multi-location support",
-      "Custom integrations",
-      "SLA guarantee",
-      "On-premise option",
+      "Full analytics",
+      "24/7 support",
     ],
     limitations: [],
-    cta: "Contact Sales",
+    cta: "Start Free Trial",
+    href: "/register",
     popular: false,
   },
 ];
@@ -236,7 +231,7 @@ const faqs = [
   {
     question: "What kind of support do you offer?",
     answer:
-      "We provide email support for Starter plans, priority support for Professional, and 24/7 dedicated support for Enterprise customers.",
+      "We provide email support for Basic, priority support for Professional, and 24/7 support for Enterprise hospitals.",
   },
   {
     question: "Can I customize the platform for my hospital?",
@@ -246,7 +241,7 @@ const faqs = [
   {
     question: "Is there a free trial available?",
     answer:
-      "Yes, we offer a 14-day free trial with full access to Professional plan features. No credit card required.",
+      "Yes, we offer a 30-day free trial with full access to Professional plan features. No credit card required.",
   },
 ];
 
@@ -358,10 +353,12 @@ export default function Home() {
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>
-                  <Button variant="outline" size="lg" className="gap-2">
-                    <Play className="h-4 w-4" />
-                    Watch Demo
-                  </Button>
+                  <Link href="#features">
+                    <Button variant="outline" size="lg" className="gap-2">
+                      <Play className="h-4 w-4" />
+                      Watch Demo
+                    </Button>
+                  </Link>
                 </div>
                 <div className="mt-8 flex items-center gap-6">
                   <div className="flex -space-x-2">
@@ -915,7 +912,7 @@ export default function Home() {
               </h2>
               <p className="text-muted-foreground max-w-2xl mx-auto">
                 Choose the plan that fits your hospital. All plans include a
-                14-day free trial.
+                30-day free trial.
               </p>
             </div>
             <div className="grid md:grid-cols-3 gap-6 md:gap-8 max-w-5xl mx-auto items-stretch">
@@ -977,12 +974,14 @@ export default function Home() {
                         </>
                       )}
                     </div>
-                    <Button
-                      className="w-full mt-auto font-fredoka"
-                      variant={plan.popular ? "default" : "outline"}
-                    >
-                      {plan.cta}
-                    </Button>
+                    <Link href={plan.href} className="mt-auto">
+                      <Button
+                        className="w-full font-fredoka"
+                        variant={plan.popular ? "default" : "outline"}
+                      >
+                        {plan.cta}
+                      </Button>
+                    </Link>
                   </CardContent>
                 </Card>
               ))}
@@ -1075,13 +1074,15 @@ export default function Home() {
                         <ArrowRight className="h-4 w-4" />
                       </Button>
                     </Link>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="bg-transparent border-white text-white"
-                    >
-                      Schedule Demo
-                    </Button>
+                    <Link href="#contact">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-transparent border-white text-white"
+                      >
+                        Schedule Demo
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </div>

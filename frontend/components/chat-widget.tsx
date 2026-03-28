@@ -410,7 +410,7 @@ export function ChatWidget({ hospitalId, hospitalName }: ChatWidgetProps) {
   return (
     <div
       className={cn(
-        "fixed bottom-6 right-6 z-50 bg-white rounded-2xl shadow-2xl border transition-all duration-300 overflow-hidden",
+        "fixed bottom-6 right-6 z-50 pb-10 bg-white rounded-2xl shadow-2xl border transition-all duration-300 overflow-hidden",
         isMinimized ? "w-72 h-14" : "w-96 h-[550px]"
       )}
     >

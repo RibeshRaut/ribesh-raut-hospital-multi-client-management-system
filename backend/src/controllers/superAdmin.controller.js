@@ -6,6 +6,11 @@ import WebsiteContactForm from '../models/websiteContactForm.model.js';
 import Service from '../models/service.model.js';
 import Admin from '../models/admin.model.js';
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+import { notifySuperAdmins } from '../services/adminNotification.service.js';
+import { sendSuperAdminNotificationEmail } from '../services/email.service.js';
+import { buildSubscriptionSnapshot } from '../services/subscription.service.js';
+import { getMonthlyPlanPrice } from '../utils/subscriptionPlans.js';
 
 // Get super admin dashboard statistics
 export const getSuperAdminStats = async (req, res) => {
@@ -22,11 +27,25 @@ export const getSuperAdminStats = async (req, res) => {
     const totalContactForms = await ContactForm.countDocuments();
     const totalServices = await Service.countDocuments();
 
+    const now = new Date();
+
+    const activePaidHospitals = await Hospital.countDocuments({
+      subscriptionStatus: 'active',
+      subscriptionPlan: { $in: ['basic', 'professional', 'enterprise'] },
+      subscriptionEndDate: { $gt: now },
+    });
+    const trialHospitals = await Hospital.countDocuments({
+      subscriptionStatus: 'trial',
+      trialEndDate: { $gt: now },
+    });
+    const expiredHospitals = await Hospital.countDocuments({
+      subscriptionStatus: 'expired',
+    });
+
     // Get hospitals with profile complete
     const hospitalsWithProfile = await Hospital.countDocuments({ isProfileComplete: true });
 
     // Calculate growth metrics
-    const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
@@ -102,7 +121,7 @@ export const getSuperAdminStats = async (req, res) => {
 
     // Get recent hospitals
     const recentHospitals = await Hospital.find()
-      .select('name email phone address isProfileComplete createdAt slug')
+      .select('name email phone address isProfileComplete createdAt slug subscriptionStatus subscriptionPlan subscriptionStartDate subscriptionEndDate trialStartDate trialEndDate')
       .sort({ createdAt: -1 })
       .limit(5);
 
@@ -183,6 +202,44 @@ export const getSuperAdminStats = async (req, res) => {
       { $sort: { '_id.year': 1, '_id.month': 1 } },
     ]);
 
+    const hospitalsWithSubscription = await Hospital.find()
+      .select('name email subscriptionStatus subscriptionPlan trialEndDate subscriptionEndDate')
+      .lean();
+
+    const monthlyRevenueCents = hospitalsWithSubscription.reduce((total, hospital) => {
+      const snapshot = buildSubscriptionSnapshot(hospital);
+      return total + Math.round(snapshot.estimatedMonthlyRevenue * 100);
+    }, 0);
+
+    const revenueByPlan = ['basic', 'professional', 'enterprise'].reduce((acc, planId) => {
+      const activeCount = hospitalsWithSubscription.filter(
+        (hospital) => hospital.subscriptionStatus === 'active' && hospital.subscriptionPlan === planId
+      ).length;
+
+      acc[planId] = {
+        hospitals: activeCount,
+        monthlyRevenue: (activeCount * getMonthlyPlanPrice(planId)) / 100,
+      };
+
+      return acc;
+    }, {});
+
+    const topRevenueHospitals = hospitalsWithSubscription
+      .map((hospital) => {
+        const snapshot = buildSubscriptionSnapshot(hospital);
+        return {
+          hospitalId: hospital._id,
+          hospitalName: hospital.name,
+          hospitalEmail: hospital.email,
+          monthlyRevenue: snapshot.estimatedMonthlyRevenue,
+          subscriptionStatus: snapshot.status,
+          plan: snapshot.currentPlan,
+          isTrialActive: snapshot.isTrialActive,
+        };
+      })
+      .sort((a, b) => b.monthlyRevenue - a.monthlyRevenue)
+      .slice(0, 10);
+
     return res.status(200).json({
       message: 'Super admin statistics retrieved successfully',
       data: {
@@ -217,6 +274,17 @@ export const getSuperAdminStats = async (req, res) => {
           services: {
             total: totalServices,
           },
+          subscriptions: {
+            activePaid: activePaidHospitals,
+            trial: trialHospitals,
+            expired: expiredHospitals,
+            totalSubscribed: activePaidHospitals + trialHospitals,
+          },
+          revenue: {
+            monthly: monthlyRevenueCents / 100,
+            annualRunRate: (monthlyRevenueCents / 100) * 12,
+            byPlan: revenueByPlan,
+          },
         },
         recentHospitals: recentHospitals.map((hospital) => ({
           _id: hospital._id,
@@ -227,6 +295,7 @@ export const getSuperAdminStats = async (req, res) => {
           isProfileComplete: hospital.isProfileComplete,
           createdAt: hospital.createdAt,
           slug: hospital.slug,
+          subscription: buildSubscriptionSnapshot(hospital),
         })),
         recentAppointments: recentAppointments.map((apt) => ({
           _id: apt._id,
@@ -239,6 +308,7 @@ export const getSuperAdminStats = async (req, res) => {
           status: apt.status,
         })),
         topHospitals,
+        topRevenueHospitals,
         chartData: {
           appointmentsByMonth,
           hospitalsByMonth,
@@ -301,6 +371,7 @@ export const getAllHospitals = async (req, res) => {
 
         return {
           ...hospital.toObject(),
+          subscription: buildSubscriptionSnapshot(hospital),
           stats: {
             doctors: doctorCount,
             appointments: appointmentCount,
@@ -375,7 +446,10 @@ export const getHospitalDetails = async (req, res) => {
     return res.status(200).json({
       message: 'Hospital details retrieved successfully',
       data: {
-        hospital: hospital.toObject(),
+        hospital: {
+          ...hospital.toObject(),
+          subscription: buildSubscriptionSnapshot(hospital),
+        },
         statistics: {
           doctors: {
             total: totalDoctors,
@@ -717,6 +791,14 @@ export const submitWebsiteContactForm = async (req, res) => {
   try {
     const { firstName, lastName, email, hospitalId, message } = req.body;
 
+    const escapeHtml = (value) =>
+      String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
     if (!firstName || !lastName || !email || !message) {
       return res.status(400).json({ error: 'First name, last name, email, and message are required' });
     }
@@ -739,6 +821,30 @@ export const submitWebsiteContactForm = async (req, res) => {
     });
 
     await contactForm.save();
+
+    const fullName = `${firstName} ${lastName}`.trim();
+    const safeHospitalName = hospitalName || 'Not provided';
+    const safeFullName = escapeHtml(fullName);
+    const safeEmail = escapeHtml(email);
+    const safeHospital = escapeHtml(safeHospitalName);
+    const safeMessage = escapeHtml(message);
+
+    await notifySuperAdmins({
+      requiredSetting: 'criticalAlerts',
+      subject: `New Website Contact Form from ${fullName}`,
+      text: `A new website contact form has been submitted by ${fullName} (${email}). Hospital: ${safeHospitalName}. Message: ${message}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
+          <h2 style="margin-bottom: 12px;">New Website Contact Form</h2>
+          <p style="margin: 0 0 8px;"><strong>Name:</strong> ${safeFullName}</p>
+          <p style="margin: 0 0 8px;"><strong>Email:</strong> ${safeEmail}</p>
+          <p style="margin: 0 0 8px;"><strong>Hospital:</strong> ${safeHospital}</p>
+          <p style="margin: 0 0 8px;"><strong>Submitted At:</strong> ${new Date(contactForm.createdAt).toLocaleString()}</p>
+          <p style="margin: 12px 0 4px;"><strong>Message:</strong></p>
+          <p style="margin: 0; white-space: pre-wrap;">${safeMessage}</p>
+        </div>
+      `,
+    });
 
     // Emit socket event for real-time update
     const io = req.app.get('io');
@@ -899,3 +1005,270 @@ export const deleteWebsiteContactForm = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Get admin profile
+export const getAdminProfile = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const admin = await Admin.findById(adminId).select('-password');
+    
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    res.status(200).json({
+      message: 'Admin profile retrieved successfully',
+      data: admin,
+    });
+  } catch (error) {
+    console.error('Error fetching admin profile:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Update admin profile (username and email)
+export const updateAdminProfile = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const { username, email } = req.body;
+
+    // Validate input
+    if (!username || !email) {
+      return res.status(400).json({ error: 'Username and email are required' });
+    }
+
+    const currentAdmin = await Admin.findById(adminId).select('username email');
+    if (!currentAdmin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    // Check if username is already taken by another admin
+    if (username !== currentAdmin.username) {
+      const existingAdmin = await Admin.findOne({ username, _id: { $ne: adminId } });
+      if (existingAdmin) {
+        return res.status(400).json({ error: 'Username is already taken' });
+      }
+    }
+
+    // Check if email is already taken by another admin
+    if (email !== currentAdmin.email) {
+      const existingEmail = await Admin.findOne({ email, _id: { $ne: adminId } });
+      if (existingEmail) {
+        return res.status(400).json({ error: 'Email is already in use' });
+      }
+    }
+
+    const updatedAdmin = await Admin.findByIdAndUpdate(
+      adminId,
+      { username, email },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    res.status(200).json({
+      message: 'Admin profile updated successfully',
+      data: updatedAdmin,
+    });
+  } catch (error) {
+    console.error('Error updating admin profile:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Change admin password
+export const changeAdminPassword = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    // Validate input
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ error: 'All password fields are required' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: 'New passwords do not match' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(currentPassword, admin.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    // Update password
+    admin.password = newPassword;
+    await admin.save();
+
+    res.status(200).json({
+      message: 'Password changed successfully',
+    });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Update notification settings
+export const updateNotificationSettings = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const {
+      newHospitalRegistration,
+      dailySummaryReport,
+      criticalAlerts,
+      emailNotifications,
+      recipientEmails,
+    } = req.body;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    const current = admin.notificationSettings || {};
+
+    const nextSettings = {
+      newHospitalRegistration:
+        typeof newHospitalRegistration === 'boolean'
+          ? newHospitalRegistration
+          : Boolean(current.newHospitalRegistration),
+      dailySummaryReport:
+        typeof dailySummaryReport === 'boolean'
+          ? dailySummaryReport
+          : Boolean(current.dailySummaryReport),
+      criticalAlerts:
+        typeof criticalAlerts === 'boolean'
+          ? criticalAlerts
+          : Boolean(current.criticalAlerts),
+      emailNotifications:
+        typeof emailNotifications === 'boolean'
+          ? emailNotifications
+          : Boolean(current.emailNotifications),
+      recipientEmails: Array.isArray(current.recipientEmails)
+        ? current.recipientEmails
+        : [],
+    };
+
+    if (recipientEmails !== undefined) {
+      if (!Array.isArray(recipientEmails)) {
+        return res.status(400).json({ error: 'recipientEmails must be an array of valid email addresses' });
+      }
+
+      const normalizedEmails = recipientEmails
+        .map((email) => (typeof email === 'string' ? email.trim().toLowerCase() : ''))
+        .filter(Boolean);
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const invalidEmail = normalizedEmails.find((email) => !emailRegex.test(email));
+
+      if (invalidEmail) {
+        return res.status(400).json({ error: `Invalid email address: ${invalidEmail}` });
+      }
+
+      nextSettings.recipientEmails = [...new Set(normalizedEmails)];
+    }
+
+    const updatedAdmin = await Admin.findByIdAndUpdate(
+      adminId,
+      {
+        notificationSettings: nextSettings,
+      },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    res.status(200).json({
+      message: 'Notification settings updated successfully',
+      data: updatedAdmin,
+    });
+  } catch (error) {
+    console.error('Error updating notification settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Send test notification email
+export const sendTestNotificationEmail = async (req, res) => {
+  try {
+    if (req.user.userType !== 'website_admin') {
+      return res.status(403).json({ error: 'Access denied. Super admin only.' });
+    }
+
+    const adminId = req.user.id;
+    const { recipientEmails } = req.body || {};
+
+    const admin = await Admin.findById(adminId).select('email notificationSettings');
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    if (!admin.notificationSettings?.emailNotifications) {
+      return res.status(400).json({ error: 'Enable email notifications before sending a test email' });
+    }
+
+    const fromPayload = Array.isArray(recipientEmails) ? recipientEmails : [];
+    const fromSettings = Array.isArray(admin.notificationSettings?.recipientEmails)
+      ? admin.notificationSettings.recipientEmails
+      : [];
+
+    const sourceRecipients = fromPayload.length > 0 ? fromPayload : fromSettings;
+    const normalizedRecipients = [...new Set(
+      sourceRecipients
+        .map((email) => (typeof email === 'string' ? email.trim().toLowerCase() : ''))
+        .filter(Boolean)
+    )];
+
+    const finalRecipients = normalizedRecipients.length > 0
+      ? normalizedRecipients
+      : (admin.email ? [admin.email.trim().toLowerCase()] : []);
+
+    if (!finalRecipients.length) {
+      return res.status(400).json({ error: 'No valid recipient email found for test notification' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidEmail = finalRecipients.find((email) => !emailRegex.test(email));
+    if (invalidEmail) {
+      return res.status(400).json({ error: `Invalid email address: ${invalidEmail}` });
+    }
+
+    const sentAt = new Date().toLocaleString();
+
+    const emailResult = await sendSuperAdminNotificationEmail({
+      to: finalRecipients,
+      subject: 'Test Notification: Super Admin Settings',
+      text: `This is a test notification email sent from Super Admin settings at ${sentAt}. If you received this, your notification email setup is working correctly.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
+          <h2 style="margin-bottom: 12px;">Test Notification Email</h2>
+          <p style="margin: 0 0 8px;">This is a test notification email sent from Super Admin settings.</p>
+          <p style="margin: 0 0 8px;"><strong>Sent at:</strong> ${sentAt}</p>
+          <p style="margin: 0;">If you received this, your notification email setup is working correctly.</p>
+        </div>
+      `,
+    });
+
+    if (!emailResult.success) {
+      return res.status(500).json({ error: emailResult.error || 'Failed to send test notification email' });
+    }
+
+    return res.status(200).json({
+      message: 'Test notification email sent successfully',
+      data: {
+        recipients: finalRecipients,
+      },
+    });
+  } catch (error) {
+    console.error('Error sending test notification email:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+

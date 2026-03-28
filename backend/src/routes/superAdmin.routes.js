@@ -12,6 +12,11 @@ import {
   getWebsiteContactForms,
   updateWebsiteContactFormStatus,
   deleteWebsiteContactForm,
+  getAdminProfile,
+  updateAdminProfile,
+  changeAdminPassword,
+  updateNotificationSettings,
+  sendTestNotificationEmail,
 } from '../controllers/superAdmin.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 
@@ -44,5 +49,12 @@ router.post('/website-contact-forms', submitWebsiteContactForm); // Public endpo
 router.get('/website-contact-forms', authenticate, getWebsiteContactForms);
 router.put('/website-contact-forms/:formId', authenticate, updateWebsiteContactFormStatus);
 router.delete('/website-contact-forms/:formId', authenticate, deleteWebsiteContactForm);
+
+// Admin profile and settings
+router.get('/profile', authenticate, getAdminProfile);
+router.put('/profile', authenticate, updateAdminProfile);
+router.put('/change-password', authenticate, changeAdminPassword);
+router.put('/notification-settings', authenticate, updateNotificationSettings);
+router.post('/notification-settings/test-email', authenticate, sendTestNotificationEmail);
 
 export default router;

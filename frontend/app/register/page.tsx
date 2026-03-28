@@ -44,6 +44,17 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState("");
 
+  interface RegisterHospitalResponseData {
+    token: string;
+    userType: "website_admin" | "hospital_admin";
+    user: {
+      id: string;
+      email?: string;
+      name?: string;
+      hospitalId?: string;
+    };
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -111,17 +122,17 @@ export default function RegisterPage() {
       });
 
       if (response.data) {
+        const responseData = response.data as RegisterHospitalResponseData;
         // Store token and user info
-        tokenManager.setToken((response.data as any).token);
-        localStorage.setItem(
-          "userInfo",
-          JSON.stringify({
-            id: (response.data as any).user.id,
-            hospitalId: (response.data as any).user.id,
-            userType: (response.data as any).userType,
-            ...(response.data as any).user,
-          })
-        );
+        tokenManager.setToken(responseData.token);
+        const userInfo = {
+          ...responseData.user,
+          hospitalId: responseData.user.id,
+          userType: responseData.userType,
+        };
+        localStorage.setItem("userInfo", JSON.stringify(userInfo));
+        // Also store userInfo in cookie for middleware access
+        document.cookie = `userInfo=${encodeURIComponent(JSON.stringify(userInfo))}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
 
         // Redirect to dashboard
         router.push("/dashboard");
@@ -142,7 +153,7 @@ export default function RegisterPage() {
   };
 
   const benefits = [
-    "14-day free trial included",
+    "30-day free trial included",
     "No credit card required",
     "Full access to all features",
     "24/7 customer support",

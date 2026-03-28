@@ -4,15 +4,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Loader2, CheckCircle2 } from "lucide-react";
-import { hospitalAPI, superAdminAPI } from "@/lib/api";
+import { APIError, hospitalAPI, superAdminAPI } from "@/lib/api";
 
 interface Hospital {
   _id: string;
@@ -46,8 +39,12 @@ export function ContactForm() {
         const hospitalList = (response.data as any).hospitals || response.data || [];
         setHospitals(hospitalList);
       }
-    } catch (err) {
-      console.error("Error fetching hospitals:", err);
+    } catch (err: unknown) {
+      if (err instanceof APIError && err.status === 503) {
+        setHospitals([]);
+        return;
+      }
+      console.warn("Could not load hospitals list");
     } finally {
       setIsLoadingHospitals(false);
     }
@@ -83,9 +80,12 @@ export function ContactForm() {
 
       // Reset success message after 5 seconds
       setTimeout(() => setIsSuccess(false), 5000);
-    } catch (err: any) {
-      console.error("Error submitting contact form:", err);
-      setError(err.message || "Failed to submit form. Please try again.");
+    } catch (err: unknown) {
+      if (err instanceof APIError) {
+        setError(err.message || "Failed to submit form. Please try again.");
+      } else {
+        setError("Failed to submit form. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -154,29 +154,6 @@ export function ContactForm() {
               }
               required
             />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">
-              Hospital (Optional)
-            </label>
-            <Select
-              value={formData.hospitalId}
-              onValueChange={(value) =>
-                setFormData({ ...formData, hospitalId: value === "none" ? "" : value })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={isLoadingHospitals ? "Loading hospitals..." : "Select a hospital"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None (General Inquiry)</SelectItem>
-                {hospitals.map((hospital) => (
-                  <SelectItem key={hospital._id} value={hospital._id}>
-                    {hospital.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">

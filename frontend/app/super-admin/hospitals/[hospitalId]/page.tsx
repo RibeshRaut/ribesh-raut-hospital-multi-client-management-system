@@ -1,26 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Building2,
   Stethoscope,
   Calendar,
   Users,
-  Activity,
   Mail,
   Phone,
   MapPin,
@@ -29,54 +26,114 @@ import {
   AlertCircle,
   Loader2,
   ArrowLeft,
-  Clock,
-  CheckCircle,
   MessageSquare,
+  CreditCard,
 } from "lucide-react";
 import Link from "next/link";
 import { superAdminAPI } from "@/lib/api";
 
+interface HospitalSubscription {
+  status?: string;
+  currentPlan?: string | null;
+  isTrialActive?: boolean;
+  trialEndDate?: string | null;
+  estimatedMonthlyRevenue?: number;
+}
+
+interface HospitalDetails {
+  name: string;
+  slug?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  registrationNumber?: string;
+  totalBeds?: number;
+  emergencyDepartment?: boolean;
+  description?: string;
+  subscription?: HospitalSubscription;
+}
+
+interface HospitalStatistics {
+  doctors?: { total?: number; active?: number };
+  appointments?: { total?: number; pending?: number };
+  patients?: number;
+  contactForms?: number;
+  services?: number;
+}
+
+interface HospitalDoctor {
+  _id: string;
+  name: string;
+  specialty?: string;
+  status?: string;
+}
+
+interface HospitalRecentAppointment {
+  _id: string;
+  patientName?: string;
+  doctorName?: string;
+  appointmentDate: string;
+  status: string;
+}
+
+interface HospitalDetailsResponse {
+  hospital: HospitalDetails;
+  statistics: HospitalStatistics;
+  recentAppointments: HospitalRecentAppointment[];
+  doctors: HospitalDoctor[];
+}
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
 export default function HospitalDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const hospitalId = params.hospitalId as string;
+  const hospitalId = (params.hospitalId as string) || "";
 
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<HospitalDetailsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (hospitalId) {
-      fetchHospitalDetails();
+  const fetchHospitalDetails = useCallback(async () => {
+    if (!hospitalId) {
+      return;
     }
-  }, [hospitalId]);
 
-  const fetchHospitalDetails = async () => {
     try {
       setIsLoading(true);
       setError(null);
       const response = await superAdminAPI.getHospitalDetails(hospitalId);
       if (response.data) {
-        setData(response.data);
+        setData(response.data as HospitalDetailsResponse);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching hospital details:", err);
-      setError(err.message || "Failed to load hospital details");
+      setError(getErrorMessage(err, "Failed to load hospital details"));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [hospitalId]);
+
+  useEffect(() => {
+    fetchHospitalDetails();
+  }, [fetchHospitalDetails]);
 
   const handleDeleteHospital = async () => {
     try {
       setIsDeleting(true);
       await superAdminAPI.deleteHospital(hospitalId);
       router.push("/super-admin/hospitals");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error deleting hospital:", err);
-      setError(err.message || "Failed to delete hospital");
+      setError(getErrorMessage(err, "Failed to delete hospital"));
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);
@@ -296,6 +353,33 @@ export default function HospitalDetailsPage() {
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="bg-emerald-100 p-3 rounded-xl">
+                  <CreditCard className="h-6 w-6 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Subscription</p>
+                  <p className="text-lg font-bold uppercase">
+                    {hospital.subscription?.status || "inactive"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Plan: {hospital.subscription?.currentPlan || "none"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Revenue: ${Number(hospital.subscription?.estimatedMonthlyRevenue || 0).toLocaleString()}/mo
+                  </p>
+                  {hospital.subscription?.isTrialActive && hospital.subscription?.trialEndDate && (
+                    <p className="text-xs text-blue-600">
+                      Trial ends {new Date(hospital.subscription.trialEndDate).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -311,7 +395,7 @@ export default function HospitalDetailsPage() {
           <CardContent>
             {doctors && doctors.length > 0 ? (
               <div className="space-y-3">
-                {doctors.map((doctor: any) => (
+                {doctors.map((doctor) => (
                   <div
                     key={doctor._id}
                     className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50"
@@ -363,7 +447,7 @@ export default function HospitalDetailsPage() {
           <CardContent>
             {recentAppointments && recentAppointments.length > 0 ? (
               <div className="space-y-3">
-                {recentAppointments.map((apt: any) => (
+                {recentAppointments.map((apt) => (
                   <div
                     key={apt._id}
                     className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50"

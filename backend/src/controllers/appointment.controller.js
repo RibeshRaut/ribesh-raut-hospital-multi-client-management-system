@@ -12,6 +12,10 @@ import {
   sendAppointmentConfirmationToPatient,
 } from '../services/email.service.js';
 import { emitAppointmentEvent } from '../socket.js';
+import {
+  evaluateAndSyncSubscriptionState,
+  validateMonthlyAppointmentQuota,
+} from '../services/subscription.service.js';
 
 export const createAppointmentRequest = async (req, res) => {
   try {
@@ -47,6 +51,29 @@ export const createAppointmentRequest = async (req, res) => {
     }
     if (!hospitalId) {
       return res.status(400).json({ error: 'Hospital ID is required' });
+    }
+
+    const hospital = await Hospital.findById(hospitalId);
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital not found' });
+    }
+
+    const subscriptionContext = req.subscriptionContext || (await evaluateAndSyncSubscriptionState(hospital));
+    if (!subscriptionContext.hasAccess) {
+      return res.status(402).json({ error: subscriptionContext.reason });
+    }
+
+    const monthlyQuota = await validateMonthlyAppointmentQuota(hospitalId, subscriptionContext.effectivePlanId);
+    if (!monthlyQuota.allowed) {
+      return res.status(403).json({
+        error: monthlyQuota.message,
+        code: 'APPOINTMENT_LIMIT_REACHED',
+        data: {
+          current: monthlyQuota.current,
+          limit: monthlyQuota.limit,
+          plan: subscriptionContext.effectivePlanId,
+        },
+      });
     }
     if (!appointmentDate) {
       return res.status(400).json({ error: 'Appointment date is required' });

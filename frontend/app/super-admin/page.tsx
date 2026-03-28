@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Building2,
   Calendar,
@@ -20,34 +20,138 @@ import {
   MessageSquare,
   ArrowRight,
   Clock,
+  CreditCard,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { superAdminAPI } from "@/lib/api";
+import { getPlatformSettings, superAdminAPI } from "@/lib/api";
+
+interface SubscriptionStats {
+  activePaid?: number;
+  trial?: number;
+  expired?: number;
+}
+
+interface RevenueStats {
+  monthly?: number;
+}
+
+interface HospitalsStats {
+  total?: number;
+  withProfile?: number;
+  growth?: number;
+}
+
+interface DoctorsStats {
+  total?: number;
+  growth?: number;
+  thisMonth?: number;
+}
+
+interface AppointmentsStats {
+  total?: number;
+  pending?: number;
+  confirmed?: number;
+  completed?: number;
+  cancelled?: number;
+  today?: number;
+  thisWeek?: number;
+}
+
+interface PatientsStats {
+  total?: number;
+}
+
+interface ContactFormsStats {
+  total?: number;
+  unread?: number;
+}
+
+interface DashboardStatistics {
+  subscriptions?: SubscriptionStats;
+  revenue?: RevenueStats;
+  hospitals?: HospitalsStats;
+  doctors?: DoctorsStats;
+  appointments?: AppointmentsStats;
+  patients?: PatientsStats;
+  contactForms?: ContactFormsStats;
+  services?: { total?: number };
+}
+
+interface RecentHospital {
+  _id: string;
+  name: string;
+  email: string;
+  isProfileComplete: boolean;
+}
+
+interface TopHospital {
+  hospitalId: string;
+  hospitalName: string;
+  hospitalEmail: string;
+  appointmentCount: number;
+}
+
+interface RecentAppointment {
+  _id: string;
+  patientName?: string;
+  patientEmail?: string;
+  doctorName?: string;
+  doctorSpecialty?: string;
+  hospitalName?: string;
+  appointmentDate: string;
+  status: string;
+}
+
+interface SuperAdminStatsData {
+  statistics?: DashboardStatistics;
+  recentHospitals?: RecentHospital[];
+  topHospitals?: TopHospital[];
+  recentAppointments?: RecentAppointment[];
+}
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+};
 
 export default function SuperAdminDashboard() {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<SuperAdminStatsData | null>(null);
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await superAdminAPI.getStats();
-      if (response.data) {
-        setStats(response.data);
+      const [statsResponse, platformSettings] = await Promise.all([
+        superAdminAPI.getStats(),
+        getPlatformSettings(),
+      ]);
+
+      if (statsResponse.data) {
+        setStats(statsResponse.data);
       }
-    } catch (err: any) {
+
+      const typedPlatformSettings = (platformSettings || {}) as {
+        maintenanceMode?: boolean;
+      };
+      setIsMaintenanceMode(Boolean(typedPlatformSettings.maintenanceMode));
+    } catch (err: unknown) {
       console.error("Error fetching super admin stats:", err);
-      setError(err.message || "Failed to load dashboard data");
+      setError(getErrorMessage(err, "Failed to load dashboard data"));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const StatCard = ({
     title,
@@ -60,7 +164,7 @@ export default function SuperAdminDashboard() {
   }: {
     title: string;
     value: number | string;
-    icon: any;
+    icon: LucideIcon;
     color: string;
     bgColor: string;
     trend?: { value: number; direction: "up" | "down" };
@@ -139,6 +243,7 @@ export default function SuperAdminDashboard() {
   }
 
   const statistics = stats?.statistics || {};
+  const monthlyRevenue = Number(statistics?.revenue?.monthly || 0);
 
   return (
     <div className="space-y-8">
@@ -148,17 +253,53 @@ export default function SuperAdminDashboard() {
           <div>
             <h1 className="text-2xl font-bold mb-2">Welcome, Super Admin</h1>
             <p className="text-slate-300">
-              Here's an overview of your entire healthcare platform.
+              Here&apos;s an overview of your entire healthcare platform.
             </p>
           </div>
           <div className="hidden md:flex items-center gap-4">
             <div className="text-right">
-              <p className="text-sm text-slate-400">Total Revenue</p>
-              <p className="text-2xl font-bold text-amber-400">Platform Active</p>
+              <p className="text-sm text-slate-400">Estimated Monthly Revenue</p>
+              <p className="text-2xl font-bold text-emerald-400">
+                ${monthlyRevenue.toLocaleString()}
+              </p>
+              <p
+                className={`text-2xl font-bold ${
+                  isMaintenanceMode ? "text-red-400" : "text-amber-400"
+                }`}
+              >
+                {isMaintenanceMode ? "Under Maintenance" : "Platform Active"}
+              </p>
             </div>
             <Activity className="h-12 w-12 text-amber-500" />
           </div>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard
+          title="Active Subscriptions"
+          value={statistics.subscriptions?.activePaid || 0}
+          icon={CreditCard}
+          color="text-emerald-600"
+          bgColor="bg-emerald-100"
+          subtitle="Paid hospitals"
+        />
+        <StatCard
+          title="Trial Hospitals"
+          value={statistics.subscriptions?.trial || 0}
+          icon={Clock}
+          color="text-blue-600"
+          bgColor="bg-blue-100"
+          subtitle="Within 1-month trial"
+        />
+        <StatCard
+          title="Expired Subscriptions"
+          value={statistics.subscriptions?.expired || 0}
+          icon={AlertCircle}
+          color="text-red-600"
+          bgColor="bg-red-100"
+          subtitle="Need renewal"
+        />
       </div>
 
       {/* Main Stats Cards */}
@@ -286,9 +427,9 @@ export default function SuperAdminDashboard() {
             </Link>
           </CardHeader>
           <CardContent>
-            {stats?.recentHospitals?.length > 0 ? (
+            {(stats?.recentHospitals ?? []).length > 0 ? (
               <div className="space-y-4">
-                {stats.recentHospitals.map((hospital: any) => (
+                {(stats?.recentHospitals ?? []).map((hospital) => (
                   <div
                     key={hospital._id}
                     className="flex items-center gap-4 p-3 rounded-lg hover:bg-secondary transition-colors"
@@ -335,9 +476,9 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {stats?.topHospitals?.length > 0 ? (
+            {(stats?.topHospitals ?? []).length > 0 ? (
               <div className="space-y-4">
-                {stats.topHospitals.map((item: any, index: number) => (
+                {(stats?.topHospitals ?? []).map((item, index: number) => (
                   <div
                     key={item.hospitalId}
                     className="flex items-center gap-4 p-3 rounded-lg hover:bg-secondary transition-colors"
@@ -394,7 +535,7 @@ export default function SuperAdminDashboard() {
           </Link>
         </CardHeader>
         <CardContent>
-          {stats?.recentAppointments?.length > 0 ? (
+          {(stats?.recentAppointments ?? []).length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -417,7 +558,7 @@ export default function SuperAdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {stats.recentAppointments.map((apt: any) => (
+                  {stats?.recentAppointments?.map((apt) => (
                     <tr key={apt._id} className="border-b hover:bg-secondary/50">
                       <td className="py-3 px-2">
                         <div className="flex items-center gap-2">

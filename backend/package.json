@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node ./src/index.js",
     "dev": "nodemon ./src/index.js",
-    "seed": "node seed.js"
+    "seed": "node seed.js",
+    "test": "DOTENV_CONFIG_QUIET=true node --test"
   },
   "devDependencies": {
     "eslint": "^9.39.1",
@@ -26,6 +27,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^9.0.0",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "nodemailer": "^6.9.7",
     "socket.io": "^4.8.3",
     "stripe": "^20.3.1"

@@ -8,6 +8,11 @@ const adminSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+    },
     password: {
       type: String,
       required: true,
@@ -19,6 +24,28 @@ const adminSchema = new mongoose.Schema(
     resetPasswordExpiry: {
       type: Date,
       default: null,
+    },
+    notificationSettings: {
+      newHospitalRegistration: {
+        type: Boolean,
+        default: true,
+      },
+      dailySummaryReport: {
+        type: Boolean,
+        default: true,
+      },
+      criticalAlerts: {
+        type: Boolean,
+        default: true,
+      },
+      emailNotifications: {
+        type: Boolean,
+        default: false,
+      },
+      recipientEmails: {
+        type: [String],
+        default: [],
+      },
     },
   },
   { timestamps: true }

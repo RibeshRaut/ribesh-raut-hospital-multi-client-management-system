@@ -5,16 +5,64 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/a
 // Custom Error class for API errors
 export class APIError extends Error implements ApiError {
   status: number;
+  code?: string;
   errors?: string[];
   details?: Record<string, string>;
 
-  constructor(status: number, message: string, errors?: string[], details?: Record<string, string>) {
+  constructor(
+    status: number,
+    message: string,
+    errors?: string[],
+    details?: Record<string, string>,
+    code?: string
+  ) {
     super(message);
     this.status = status;
+    this.code = code;
     this.errors = errors;
     this.details = details;
     this.name = 'APIError';
   }
+}
+
+let redirectHandler = (url: string) => {
+  window.location.assign(url);
+};
+
+export const __setRedirectHandlerForTests = (handler: (url: string) => void) => {
+  redirectHandler = handler;
+};
+
+function handleSubscriptionRequiredRedirect(status: number, data: Record<string, unknown>) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (status !== 402 || data?.code !== 'SUBSCRIPTION_REQUIRED') {
+    return;
+  }
+
+  if (window.location.pathname.startsWith('/dashboard/billing')) {
+    return;
+  }
+
+  const userInfoRaw = localStorage.getItem('userInfo');
+  if (!userInfoRaw) {
+    return;
+  }
+
+  try {
+    const userInfo = JSON.parse(userInfoRaw) as { userType?: string };
+    if (userInfo.userType !== 'hospital_admin') {
+      return;
+    }
+  } catch {
+    return;
+  }
+
+  const redirectFrom = `${window.location.pathname}${window.location.search}`;
+  const nextUrl = `/dashboard/billing?subscription=required&from=${encodeURIComponent(redirectFrom)}`;
+  redirectHandler(nextUrl);
 }
 
 // Fetch wrapper with error handling
@@ -53,8 +101,11 @@ async function fetchAPI<T>(
       // Handle different error response formats
       const errorMessage = data.error || data.message || 'An error occurred';
       const errorList = data.errors || (data.error ? [data.error] : []);
+      const errorCode = data.code;
+
+      handleSubscriptionRequiredRedirect(response.status, data);
       
-      throw new APIError(response.status, errorMessage, errorList, data.details);
+      throw new APIError(response.status, errorMessage, errorList, data.details, errorCode);
     }
 
     return {
@@ -761,11 +812,81 @@ export const subscriptionAPI = {
   },
 };
 
+// Admin Settings API calls
+export const adminAPI = {
+  getProfile: async () => {
+    try {
+      return await fetchAPI('/super-admin/profile', {
+        method: 'GET',
+      });
+    } catch (error: any) {
+      // During maintenance mode or auth errors, return empty profile
+      if (error?.status === 503 || error?.status === 401) {
+        console.warn("Could not fetch admin profile (possibly in maintenance mode)");
+        return {
+          data: {
+            username: "",
+            email: "",
+            notificationSettings: {
+              newHospitalRegistration: true,
+              dailySummaryReport: true,
+              criticalAlerts: true,
+              emailNotifications: false,
+              recipientEmails: [],
+            },
+          },
+        };
+      }
+      throw error;
+    }
+  },
+
+  updateProfile: async (data: { username: string; email: string }) => {
+    return fetchAPI('/super-admin/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  changePassword: async (data: {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+  }) => {
+    return fetchAPI('/super-admin/change-password', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateNotificationSettings: async (data: {
+    newHospitalRegistration: boolean;
+    dailySummaryReport: boolean;
+    criticalAlerts: boolean;
+    emailNotifications: boolean;
+    recipientEmails: string[];
+  }) => {
+    return fetchAPI('/super-admin/notification-settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  sendTestNotificationEmail: async (data?: { recipientEmails?: string[] }) => {
+    return fetchAPI('/super-admin/notification-settings/test-email', {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    });
+  },
+};
+
 // Utility functions for token management
 export const tokenManager = {
   setToken: (token: string) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('token', token);
+      // Also set as cookie for middleware access
+      document.cookie = `token=${token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
     }
   },
 
@@ -779,6 +900,10 @@ export const tokenManager = {
   removeToken: () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('token');
+      localStorage.removeItem('userInfo');
+      // Also remove from cookies
+      document.cookie = 'token=; path=/; max-age=0; SameSite=Lax';
+      document.cookie = 'userInfo=; path=/; max-age=0; SameSite=Lax';
     }
   },
 
@@ -797,4 +922,30 @@ export const tokenManager = {
       return false;
     }
   },
+};
+
+export const getPlatformSettings = async () => {
+  try {
+    const response = await fetchAPI('/platform', {
+      skipAuth: false,
+    });
+    return response.data;
+  } catch (error) {
+    // Return default settings if fetch fails (e.g., during maintenance mode)
+    console.warn("Could not fetch platform settings, using defaults");
+    return {
+      maintenanceMode: false,
+      allowNewRegistrations: true,
+      requireEmailVerification: true,
+    };
+  }
+};
+
+export const updatePlatformSettings = async (settings: any) => {
+  const response = await fetchAPI('/platform', {
+    method: "PUT",
+    skipAuth: false,
+    body: JSON.stringify(settings),
+  });
+  return response.data;
 };
