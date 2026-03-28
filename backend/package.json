@@ -10,7 +10,9 @@
     "start": "node ./src/index.js",
     "dev": "nodemon ./src/index.js",
     "seed": "node seed.js",
-    "test": "DOTENV_CONFIG_QUIET=true node --test"
+    "test": "npm run test:all",
+    "test:all": "DOTENV_CONFIG_QUIET=true node ./scripts/run-tests-with-log.mjs",
+    "test:all:raw": "DOTENV_CONFIG_QUIET=true node --test --test-reporter=spec"
   },
   "devDependencies": {
     "eslint": "^9.39.1",

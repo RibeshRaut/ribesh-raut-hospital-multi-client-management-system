@@ -7,8 +7,9 @@ import Hospital from '../models/hospital.model.js';
 import {
   sendAppointmentConfirmationToDoctor,
   sendAppointmentConfirmationToPatient,
+  sendPaymentReceiptToPatient,
 } from '../services/email.service.js';
-import { emitPaymentEvent } from '../socket.js';
+import { emitAppointmentEvent, emitPaymentEvent } from '../socket.js';
 import { handleSubscriptionCheckoutCompleted, handleSubscriptionWebhook } from './subscription.controller.js';
 // Initialize Stripe with test secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_your_test_key');
@@ -277,31 +278,84 @@ const handlePaymentSuccess = async (session, io) => {
       return;
     }
 
+    if (session.payment_status !== 'paid') {
+      console.warn(
+        `Skipping appointment confirmation because Stripe session is not paid. appointmentId=${appointmentId}, payment_status=${session.payment_status}`
+      );
+      return;
+    }
+
+    if (
+      appointment.status === 'confirmed' &&
+      appointment.paymentStatus === 'half_paid' &&
+      appointment.stripePaymentIntentId &&
+      String(appointment.stripePaymentIntentId) === String(session.payment_intent)
+    ) {
+      console.log(`Payment success webhook already processed for appointment: ${appointmentId}`);
+      return;
+    }
+
     // Update appointment payment status (50% payment = half_paid)
     appointment.paymentStatus = 'half_paid';
     appointment.stripePaymentIntentId = session.payment_intent;
     appointment.status = 'confirmed'; // Auto-confirm on payment
     await appointment.save();
 
-    // Send confirmation and payment receipt emails
-    try {
-      await sendAppointmentConfirmationToDoctor(appointment);
-      await sendAppointmentConfirmationToPatient(appointment);
-      // Send payment receipt email
-      const { sendPaymentReceiptToPatient } = await import('../services/email.service.js');
-      await sendPaymentReceiptToPatient({
+    const doctor = appointment.doctorId;
+    const hospital = appointment.hospitalId;
+
+    // Send confirmation and receipt emails immediately after successful payment
+    const emailTasks = [];
+
+    emailTasks.push(
+      sendAppointmentConfirmationToPatient({
+        patientEmail: appointment.userEmail,
+        patientName: appointment.userName,
+        doctorName: doctor?.name,
+        doctorSpecialty: doctor?.specialty,
+        appointmentDate: appointment.appointmentDate,
+        duration: appointment.duration || 30,
+        hospitalName: hospital?.name,
+        hospitalAddress: hospital?.address,
+        hospitalPhone: hospital?.phone,
+      })
+    );
+
+    if (doctor?.email) {
+      emailTasks.push(
+        sendAppointmentConfirmationToDoctor({
+          doctorEmail: doctor.email,
+          doctorName: doctor.name,
+          patientName: appointment.userName,
+          patientEmail: appointment.userEmail,
+          patientPhone: appointment.userPhone,
+          appointmentDate: appointment.appointmentDate,
+          duration: appointment.duration || 30,
+          hospitalName: hospital?.name,
+          notes: appointment.notes,
+        })
+      );
+    }
+
+    emailTasks.push(
+      sendPaymentReceiptToPatient({
         patientName: appointment.userName,
         patientEmail: appointment.userEmail,
         appointmentDate: appointment.appointmentDate,
-        doctorName: appointment.doctorId?.name,
-        hospitalName: appointment.hospitalId?.name,
+        doctorName: doctor?.name,
+        hospitalName: hospital?.name,
         consultationFee: appointment.consultationFee,
         paymentAmount: appointment.paymentAmount,
         transactionId: session.payment_intent,
-      });
-    } catch (emailError) {
-      console.error('Error sending emails:', emailError);
-    }
+      })
+    );
+
+    const emailResults = await Promise.allSettled(emailTasks);
+    emailResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`Email task ${index + 1} failed for appointment ${appointmentId}:`, result.reason);
+      }
+    });
 
     // Emit real-time event for payment success
     if (io) {
@@ -312,6 +366,11 @@ const handlePaymentSuccess = async (session, io) => {
         hospitalId: appointment.hospitalId,
         doctorId: appointment.doctorId,
         userId: appointment.userId,
+      });
+
+      emitAppointmentEvent(io, 'statusUpdated', {
+        ...appointment.toObject(),
+        status: 'confirmed',
       });
     }
 
@@ -453,5 +512,53 @@ export const verifyPaymentSession = async (req, res) => {
   } catch (error) {
     console.error('Error verifying payment session:', error);
     res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Confirm appointment after successful payment redirect.
+ * Fallback for environments where webhook delivery may be delayed.
+ */
+export const confirmPaidAppointment = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    if (!appointment.stripeSessionId) {
+      return res.status(400).json({ error: 'No Stripe session found for this appointment' });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(appointment.stripeSessionId);
+    if (!session || session.payment_status !== 'paid') {
+      return res.status(409).json({
+        error: 'Payment is not completed yet',
+        paymentStatus: session?.payment_status || 'unpaid',
+      });
+    }
+
+    await handlePaymentSuccess(session, req.app.get('io'));
+
+    const updatedAppointment = await Appointment.findById(appointmentId)
+      .populate('doctorId', 'name specialty')
+      .populate('hospitalId', 'name');
+
+    return res.status(200).json({
+      message: 'Appointment confirmed successfully after payment',
+      data: {
+        appointmentId: updatedAppointment?._id,
+        status: updatedAppointment?.status,
+        paymentStatus: updatedAppointment?.paymentStatus,
+        appointmentDate: updatedAppointment?.appointmentDate,
+        doctorName: updatedAppointment?.doctorId?.name,
+        hospitalName: updatedAppointment?.hospitalId?.name,
+      },
+    });
+  } catch (error) {
+    console.error('Error confirming paid appointment:', error);
+    return res.status(500).json({ error: error.message });
   }
 };
