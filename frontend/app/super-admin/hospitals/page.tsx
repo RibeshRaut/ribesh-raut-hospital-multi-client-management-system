@@ -77,6 +77,7 @@ interface Hospital {
   subscription?: {
     status?: string;
     currentPlan?: string | null;
+    effectivePlan?: string | null;
     isTrialActive?: boolean;
     trialEndDate?: string | null;
     estimatedMonthlyRevenue?: number;
@@ -315,7 +316,7 @@ export default function HospitalsPage() {
                           {(hospital.subscription?.status || "inactive").toUpperCase()}
                         </Badge>
                         <p className="text-xs text-muted-foreground">
-                          Plan: {hospital.subscription?.currentPlan || "none"}
+                          Plan: {hospital.subscription?.effectivePlan || hospital.subscription?.currentPlan || "none"}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Revenue: ${Number(hospital.subscription?.estimatedMonthlyRevenue || 0).toLocaleString()}/mo
@@ -346,16 +347,7 @@ export default function HospitalsPage() {
                             <Eye className="h-4 w-4" />
                           </Button>
                         </Link>
-                        {hospital.slug && (
-                          <Link
-                            href={`/hospital/${hospital.slug}`}
-                            target="_blank"
-                          >
-                            <Button variant="outline" size="sm">
-                              <ExternalLink className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                        )}
+
                         <Button
                           variant="outline"
                           size="sm"

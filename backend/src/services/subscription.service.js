@@ -20,15 +20,21 @@ export const createTrialWindow = (startDate = new Date()) => {
   return { trialStartDate, trialEndDate };
 };
 
+const SUBSCRIPTION_GRACE_MS = 5 * 60 * 1000;
+
 export const isDateInFuture = (dateValue) => {
   if (!dateValue) return false;
-  return new Date(dateValue).getTime() > Date.now();
+  return new Date(dateValue).getTime() >= Date.now() - SUBSCRIPTION_GRACE_MS;
 };
 
 export const getEffectivePlanId = (hospital) => {
   if (!hospital) return null;
 
-  if (hospital.subscriptionStatus === 'active' && hospital.subscriptionPlan) {
+  if (
+    (hospital.subscriptionStatus === 'active' || hospital.subscriptionStatus === 'cancelled') &&
+    hospital.subscriptionPlan &&
+    (hospital.subscriptionEndDate ? isDateInFuture(hospital.subscriptionEndDate) : true)
+  ) {
     return hospital.subscriptionPlan;
   }
 
@@ -48,11 +54,16 @@ export const evaluateAndSyncSubscriptionState = async (hospital) => {
   const updates = {};
 
   const hasActivePaidSubscription =
-    hospital.subscriptionStatus === 'active' &&
+    (hospital.subscriptionStatus === 'active' || hospital.subscriptionStatus === 'cancelled') &&
     hospital.subscriptionPlan &&
-    isDateInFuture(hospital.subscriptionEndDate);
+    (hospital.subscriptionEndDate ? isDateInFuture(hospital.subscriptionEndDate) : true);
 
   if (!hasActivePaidSubscription) {
+    // If cancellation period ended, move to expired.
+    if (hospital.subscriptionStatus === 'cancelled') {
+      updates.subscriptionStatus = 'expired';
+    }
+
     const hasActiveTrial =
       hospital.subscriptionStatus === 'trial' &&
       isDateInFuture(hospital.trialEndDate);
@@ -102,9 +113,9 @@ export const buildSubscriptionSnapshot = (hospital) => {
   const effectivePlan = effectivePlanId ? getPlanById(effectivePlanId) : null;
   const isTrialActive = hospital.subscriptionStatus === 'trial' && isDateInFuture(hospital.trialEndDate);
   const isPaidActive =
-    hospital.subscriptionStatus === 'active' &&
+    (hospital.subscriptionStatus === 'active' || hospital.subscriptionStatus === 'cancelled') &&
     Boolean(hospital.subscriptionPlan) &&
-    isDateInFuture(hospital.subscriptionEndDate);
+    (hospital.subscriptionEndDate ? isDateInFuture(hospital.subscriptionEndDate) : true);
 
   return {
     status: hospital.subscriptionStatus || 'inactive',

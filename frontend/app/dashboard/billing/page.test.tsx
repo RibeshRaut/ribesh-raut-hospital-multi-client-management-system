@@ -158,7 +158,7 @@ describe('Dashboard billing page', () => {
 
     render(<DashboardBillingPage />);
 
-    const switchButton = await screen.findByRole('button', { name: 'Switch Plan' });
+    const switchButton = await screen.findByRole('button', { name: 'Switch to Professional Plan' });
     fireEvent.click(switchButton);
 
     await waitFor(() => {

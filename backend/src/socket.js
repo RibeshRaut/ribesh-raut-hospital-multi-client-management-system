@@ -272,11 +272,37 @@ export const setupSocketIO = (io) => {
     });
 
     // Handle disconnect
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       console.log('Socket disconnected:', socket.id);
 
       if (socket.sessionId) {
         connectedUsers.delete(socket.sessionId);
+
+        if (!socket.isAdmin && socket.hospitalId) {
+          try {
+            const updatedChat = await Chat.findOneAndUpdate(
+              {
+                hospitalId: socket.hospitalId,
+                sessionId: socket.sessionId,
+                chatType: 'human',
+                status: { $in: ['active', 'waiting'] },
+              },
+              {
+                $set: {
+                  status: 'waiting',
+                  lastActivity: new Date(),
+                },
+              },
+              { new: true }
+            );
+
+            if (updatedChat) {
+              notifyAdminOfWaitingChats(io, socket.hospitalId);
+            }
+          } catch (error) {
+            console.error('Error updating chat status on user disconnect:', error);
+          }
+        }
       }
 
       if (socket.isAdmin && socket.hospitalId) {
@@ -302,10 +328,15 @@ const notifyAdminOfWaitingChats = async (io, hospitalId) => {
     const chatList = waitingChats.map(chat => ({
       _id: chat._id,
       sessionId: chat.sessionId,
+      hospitalId: chat.hospitalId,
+      chatType: chat.chatType,
       userName: chat.userName,
       userEmail: chat.userEmail,
       status: chat.status,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
       lastActivity: chat.lastActivity,
+      messages: chat.messages,
       unreadCount: chat.messages.filter(m => m.role === 'user' && !m.readByAdmin).length,
       lastMessage: chat.messages[chat.messages.length - 1],
     }));

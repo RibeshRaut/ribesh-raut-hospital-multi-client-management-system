@@ -54,6 +54,15 @@ type Schedule = {
   status: "Active" | "Inactive";
 };
 
+const getBackendBaseUrl = () =>
+  (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002/api").replace(/\/api\/?$/, "");
+
+const resolveImageUrl = (imagePath?: string) => {
+  if (!imagePath) return "";
+  if (/^https?:\/\//i.test(imagePath)) return imagePath;
+  return `${getBackendBaseUrl()}${imagePath.startsWith("/") ? imagePath : `/${imagePath}`}`;
+};
+
 const weekDays = [
   "Monday",
   "Tuesday",
@@ -250,7 +259,7 @@ export default function SchedulesPage() {
         return (
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
-              <AvatarImage src={doctorPhoto ? `http://localhost:3002${doctorPhoto}` : ''} />
+              <AvatarImage src={resolveImageUrl(doctorPhoto)} />
               <AvatarFallback>
                 {doctorName
                   .split(" ")
@@ -400,7 +409,7 @@ export default function SchedulesPage() {
                     <SelectItem key={doctor._id} value={doctor._id}>
                       <div className="flex items-center gap-2">
                         <Avatar className="h-6 w-6">
-                          <AvatarImage src={doctor.photo ? `http://localhost:3002${doctor.photo}` : ''} />
+                          <AvatarImage src={resolveImageUrl(doctor.photo)} />
                           <AvatarFallback>
                             {doctor.name
                               .split(" ")

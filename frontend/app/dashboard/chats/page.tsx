@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 interface Message {
   role: "user" | "assistant" | "admin";
   content: string;
-  timestamp: Date;
+  timestamp: Date | string;
   readByAdmin?: boolean;
 }
 
@@ -42,7 +42,81 @@ interface ChatSession {
   messages: Message[];
   createdAt: string;
   updatedAt: string;
+  lastActivity?: string;
+  unreadCount?: number;
+  lastMessage?: Message;
 }
+
+type UnknownRecord = Record<string, unknown>;
+
+const asRecord = (value: unknown): UnknownRecord =>
+  value && typeof value === "object" ? (value as UnknownRecord) : {};
+
+const toValidDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value as string | number);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatDateTime = (value: unknown) => {
+  const date = toValidDate(value);
+  if (!date) return "—";
+  return date.toLocaleString();
+};
+
+const formatTime = (value: unknown) => {
+  const date = toValidDate(value);
+  if (!date) return "--:--";
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const normalizeMessage = (message: unknown): Message => {
+  const msg = asRecord(message);
+  const role = msg.role === "user" || msg.role === "assistant" || msg.role === "admin" ? msg.role : "assistant";
+
+  return {
+    role,
+    content: typeof msg.content === "string" ? msg.content : "",
+    timestamp: toValidDate(msg.timestamp) || new Date(),
+    readByAdmin: typeof msg.readByAdmin === "boolean" ? msg.readByAdmin : undefined,
+  };
+};
+
+const normalizeChat = (chat: unknown): ChatSession => {
+  const source = asRecord(chat);
+  const sourceMessages = Array.isArray(source.messages) ? source.messages : [];
+  const normalizedMessages = sourceMessages
+    ? sourceMessages.map((message) => normalizeMessage(message))
+    : [];
+
+  const normalizedLastMessage = source.lastMessage
+    ? normalizeMessage(source.lastMessage)
+    : normalizedMessages.length > 0
+    ? normalizedMessages[normalizedMessages.length - 1]
+    : undefined;
+
+  const updatedAt =
+    (typeof source.updatedAt === "string" && source.updatedAt) ||
+    (typeof source.lastActivity === "string" && source.lastActivity) ||
+    (typeof source.createdAt === "string" && source.createdAt) ||
+    new Date().toISOString();
+  const createdAt =
+    (typeof source.createdAt === "string" && source.createdAt) ||
+    (typeof source.lastActivity === "string" && source.lastActivity) ||
+    updatedAt;
+
+  return {
+    ...(source as unknown as ChatSession),
+    messages: normalizedMessages,
+    lastMessage: normalizedLastMessage,
+    createdAt,
+    updatedAt,
+    lastActivity: (typeof source.lastActivity === "string" && source.lastActivity) || updatedAt,
+  };
+};
 
 export default function ChatsPage() {
   const [chats, setChats] = useState<ChatSession[]>([]);
@@ -93,6 +167,10 @@ export default function ChatsPage() {
 
     const socketInstance = io(process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:3002", {
       transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
     });
 
     socketInstance.on("connect", () => {
@@ -101,20 +179,22 @@ export default function ChatsPage() {
     });
 
     socketInstance.on("chat:newChat", ({ chat }) => {
+      const normalizedChat = normalizeChat(chat);
       setChats((prev) => {
-        const exists = prev.find((c) => c._id === chat._id);
+        const exists = prev.find((c) => c._id === normalizedChat._id);
         if (exists) return prev;
-        return [chat, ...prev];
+        return [normalizedChat, ...prev];
       });
     });
 
     socketInstance.on("chat:newMessage", ({ chatId, message }) => {
+      const normalizedMessage = normalizeMessage(message);
       setChats((prev) =>
         prev.map((chat) =>
           chat._id === chatId
             ? {
                 ...chat,
-                messages: [...(chat.messages || []), message],
+                messages: [...(chat.messages || []), normalizedMessage],
                 updatedAt: new Date().toISOString(),
               }
             : chat
@@ -125,7 +205,7 @@ export default function ChatsPage() {
         prev && prev._id === chatId
           ? {
               ...prev,
-              messages: [...(prev.messages || []), message],
+              messages: [...(prev.messages || []), normalizedMessage],
             }
           : prev
       );
@@ -138,19 +218,42 @@ export default function ChatsPage() {
       }
     });
 
-    socketInstance.on("admin:waitingChats", ({ chats: waitingChats }) => {
-      // Update waiting chats
+    const handleWaitingChats = (payload: unknown) => {
+      const payloadRecord = asRecord(payload);
+      const waitingChats = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payloadRecord.chats)
+        ? payloadRecord.chats
+        : [];
+
+      if (waitingChats.length === 0) return;
+
       setChats((prev) => {
-        const updatedChats = [...prev];
-        waitingChats.forEach((wc: ChatSession) => {
-          const index = updatedChats.findIndex((c) => c._id === wc._id);
-          if (index === -1) {
-            updatedChats.unshift(wc);
-          }
+        const chatMap = new Map(prev.map((chat) => [chat._id, chat]));
+
+        waitingChats.forEach((incomingChat) => {
+          const normalizedChat = normalizeChat(incomingChat);
+          const existing = chatMap.get(normalizedChat._id);
+          chatMap.set(normalizedChat._id, {
+            ...(existing || normalizedChat),
+            ...normalizedChat,
+            messages:
+              normalizedChat.messages.length > 0
+                ? normalizedChat.messages
+                : existing?.messages || [],
+          });
         });
-        return updatedChats;
+
+        return Array.from(chatMap.values()).sort(
+          (a, b) =>
+            (toValidDate(b.updatedAt || b.lastActivity)?.getTime() || 0) -
+            (toValidDate(a.updatedAt || a.lastActivity)?.getTime() || 0)
+        );
       });
-    });
+    };
+
+    socketInstance.on("chat:waitingList", handleWaitingChats);
+    socketInstance.on("admin:waitingChats", handleWaitingChats);
 
     setSocket(socketInstance);
 
@@ -177,7 +280,7 @@ export default function ChatsPage() {
       const data = await response.json();
 
       if (data.success) {
-        setChats(data.chats);
+        setChats((Array.isArray(data.chats) ? data.chats : []).map((chat) => normalizeChat(chat)));
       }
     } catch (error) {
       console.error("Error fetching chats:", error);
@@ -471,7 +574,7 @@ export default function ChatsPage() {
                   filteredChats.map((chat) => {
                     const unreadCount = getUnreadCount(chat);
                     const messages = chat.messages || [];
-                    const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+                    const lastMessage = chat.lastMessage || (messages.length > 0 ? messages[messages.length - 1] : null);
 
                     return (
                       <button
@@ -538,7 +641,7 @@ export default function ChatsPage() {
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
-                                {new Date(chat.updatedAt).toLocaleString()}
+                                {formatDateTime(chat.updatedAt || chat.lastActivity || lastMessage?.timestamp)}
                               </span>
                             </div>
                           </div>
@@ -669,10 +772,7 @@ export default function ChatsPage() {
                               : "text-muted-foreground"
                           )}
                         >
-                          {new Date(message.timestamp).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {formatTime(message.timestamp)}
                         </p>
                       </div>
                     </div>

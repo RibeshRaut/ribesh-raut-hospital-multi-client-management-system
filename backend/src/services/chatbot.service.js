@@ -365,10 +365,15 @@ export const getWaitingChats = async (hospitalId) => {
     return chats.map(chat => ({
       _id: chat._id,
       sessionId: chat.sessionId,
+      hospitalId: chat.hospitalId,
+      chatType: chat.chatType,
       userName: chat.userName,
       userEmail: chat.userEmail,
       status: chat.status,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
       lastActivity: chat.lastActivity,
+      messages: chat.messages,
       unreadCount: chat.messages.filter(m => m.role === 'user' && !m.readByAdmin).length,
       lastMessage: chat.messages[chat.messages.length - 1],
     }));

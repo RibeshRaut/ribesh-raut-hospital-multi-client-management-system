@@ -370,23 +370,20 @@ export default function ServicesPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="category">Category</Label>
-                <Select
+                <Input
+                  id="category"
+                  list="service-categories"
+                  placeholder="Select or type category"
                   value={formData.category}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, category: value })
+                  onChange={(e) =>
+                    setFormData({ ...formData, category: e.target.value })
                   }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
+                <datalist id="service-categories">
+                  {categories.map((category) => (
+                    <option key={category} value={category} />
+                  ))}
+                </datalist>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="icon">Icon</Label>

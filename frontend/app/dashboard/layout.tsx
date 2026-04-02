@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/popover";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { subscriptionAPI, tokenManager } from "@/lib/api";
+import { hospitalAPI, subscriptionAPI, tokenManager } from "@/lib/api";
 import { NotificationProvider, useNotifications, Notification } from "@/lib/notification-context";
 
 const sidebarLinks = [
@@ -106,8 +106,18 @@ interface UserInfo {
   name?: string;
   email?: string;
   username?: string;
+  profilePicture?: string;
   needsOnboarding?: boolean;
 }
+
+const getBackendBaseUrl = () =>
+  (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002/api").replace(/\/api\/?$/, "");
+
+const resolveImageUrl = (imagePath?: string) => {
+  if (!imagePath) return "";
+  if (/^https?:\/\//i.test(imagePath)) return imagePath;
+  return `${getBackendBaseUrl()}${imagePath.startsWith("/") ? imagePath : `/${imagePath}`}`;
+};
 
 export default function DashboardLayout({
   children,
@@ -117,12 +127,13 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [hospitalProfilePicture, setHospitalProfilePicture] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
     // Check authentication and user info
-    const checkAuth = () => {
+    const checkAuth = async () => {
       const token = tokenManager.getToken();
       const user = localStorage.getItem("userInfo");
 
@@ -141,6 +152,17 @@ export default function DashboardLayout({
         }
 
         setUserInfo(userData);
+
+        const resolvedHospitalId = userData.hospitalId || userData.id;
+        if (resolvedHospitalId) {
+          try {
+            const response = await hospitalAPI.getById(resolvedHospitalId);
+            const hospital = (response.data as { profilePicture?: string }) || {};
+            setHospitalProfilePicture(hospital.profilePicture || "");
+          } catch (error) {
+            console.error("Error loading hospital profile picture:", error);
+          }
+        }
 
         // Check if hospital admin needs onboarding (first login)
         if (
@@ -194,6 +216,7 @@ export default function DashboardLayout({
         displayName={displayName}
         displayEmail={displayEmail}
         initials={initials}
+        avatarUrl={resolveImageUrl(hospitalProfilePicture || userInfo?.profilePicture)}
         needsOnboarding={needsOnboarding}
         handleLogout={handleLogout}
       >
@@ -320,6 +343,7 @@ function DashboardContent({
   displayName,
   displayEmail,
   initials,
+  avatarUrl,
   needsOnboarding,
   handleLogout,
   children,
@@ -329,6 +353,7 @@ function DashboardContent({
   displayName: string;
   displayEmail: string;
   initials: string;
+  avatarUrl: string;
   needsOnboarding: boolean;
   handleLogout: () => void;
   children: React.ReactNode;
@@ -476,7 +501,7 @@ function DashboardContent({
         <div className="p-4 border-t border-border">
           <div className="flex items-center gap-3 mb-3">
             <Avatar className="h-10 w-10 bg-primary text-white">
-              <AvatarImage src="" />
+              <AvatarImage src={avatarUrl} />
               <AvatarFallback className="bg-primary text-white">
                 {initials}
               </AvatarFallback>
@@ -523,7 +548,7 @@ function DashboardContent({
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="gap-2">
                     <Avatar className="h-8 w-8 bg-primary text-white">
-                      <AvatarImage src="" />
+                      <AvatarImage src={avatarUrl} />
                       <AvatarFallback className="bg-primary text-white">
                         {initials}
                       </AvatarFallback>

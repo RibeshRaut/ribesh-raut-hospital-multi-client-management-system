@@ -161,6 +161,19 @@ export default function AllAppointmentsPage() {
     return colors[status] || "bg-gray-100 text-gray-800";
   };
 
+  const getDisplayTime = (appointment: Appointment) => {
+    if (appointment.timeSlot) return appointment.timeSlot;
+
+    const date = new Date(appointment.appointmentDate);
+    if (Number.isNaN(date.getTime())) return "N/A";
+
+    return date.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
   if (isLoading && appointments.length === 0) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
@@ -315,7 +328,7 @@ export default function AllAppointmentsPage() {
                         </p>
                         <p className="flex items-center gap-1 text-sm text-muted-foreground">
                           <Clock className="h-3 w-3" />
-                          {appointment.timeSlot || "N/A"}
+                          {getDisplayTime(appointment)}
                         </p>
                       </div>
                     </TableCell>

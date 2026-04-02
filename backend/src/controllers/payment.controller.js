@@ -8,6 +8,7 @@ import {
   sendAppointmentConfirmationToDoctor,
   sendAppointmentConfirmationToPatient,
   sendPaymentReceiptToPatient,
+  sendRemainingPaymentLinkToPatient,
 } from '../services/email.service.js';
 import { emitAppointmentEvent, emitPaymentEvent } from '../socket.js';
 import { handleSubscriptionCheckoutCompleted, handleSubscriptionWebhook } from './subscription.controller.js';
@@ -295,8 +296,18 @@ const handlePaymentSuccess = async (session, io) => {
       return;
     }
 
-    // Update appointment payment status (50% payment = half_paid)
-    appointment.paymentStatus = 'half_paid';
+    const paymentType = session.metadata?.paymentType || 'advance';
+
+    if (paymentType === 'remaining_balance') {
+      const consultationFee = Number(appointment.consultationFee || 0);
+      appointment.paymentStatus = 'paid';
+      if (consultationFee > 0) {
+        appointment.paymentAmount = consultationFee;
+      }
+    } else {
+      appointment.paymentStatus = 'half_paid';
+    }
+
     appointment.stripePaymentIntentId = session.payment_intent;
     appointment.status = 'confirmed'; // Auto-confirm on payment
     await appointment.save();
@@ -362,7 +373,8 @@ const handlePaymentSuccess = async (session, io) => {
       emitPaymentEvent(io, 'paymentSuccess', {
         appointmentId,
         status: 'confirmed',
-        paymentStatus: 'half_paid',
+        paymentStatus: appointment.paymentStatus,
+        paymentType,
         hospitalId: appointment.hospitalId,
         doctorId: appointment.doctorId,
         userId: appointment.userId,
@@ -377,6 +389,111 @@ const handlePaymentSuccess = async (session, io) => {
     console.log(`Payment successful for appointment: ${appointmentId}`);
   } catch (error) {
     console.error('Error handling payment success:', error);
+  }
+};
+
+/**
+ * Send remaining payment link to patient email
+ */
+export const sendRemainingPaymentLink = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+
+    const appointment = await Appointment.findById(appointmentId)
+      .populate('doctorId')
+      .populate('hospitalId');
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const requesterHospitalId = req.user?.hospitalId || req.user?.id;
+    if (
+      req.user?.userType === 'hospital_admin' &&
+      String(appointment.hospitalId?._id || appointment.hospitalId) !== String(requesterHospitalId)
+    ) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (appointment.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot send payment link for cancelled appointment' });
+    }
+
+    const consultationFee = Number(appointment.consultationFee || 0);
+    const paidAmount = Number(appointment.paymentAmount || 0);
+    const remainingAmount = Math.max(consultationFee - paidAmount, 0);
+
+    if (consultationFee <= 0 || remainingAmount <= 0) {
+      return res.status(400).json({ error: 'No remaining payment due for this appointment' });
+    }
+
+    const doctor = appointment.doctorId;
+    const hospital = appointment.hospitalId;
+    const paymentAmountCents = Math.round(remainingAmount * 100);
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      mode: 'payment',
+      customer_email: appointment.userEmail,
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `Remaining balance - Appointment with Dr. ${doctor?.name || 'Doctor'}`,
+              description: `${hospital?.name || 'Hospital'} appointment remaining payment`,
+            },
+            unit_amount: paymentAmountCents,
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        appointmentId: appointment._id.toString(),
+        doctorId: String(doctor?._id || ''),
+        hospitalId: String(hospital?._id || ''),
+        patientName: appointment.userName,
+        patientEmail: appointment.userEmail,
+        paymentType: 'remaining_balance',
+      },
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/hospital/${hospital?.slug || hospital?._id}?payment=success&appointment=${appointment._id}`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/hospital/${hospital?.slug || hospital?._id}?payment=cancelled&appointment=${appointment._id}`,
+    });
+
+    const emailResult = await sendRemainingPaymentLinkToPatient({
+      patientName: appointment.userName,
+      patientEmail: appointment.userEmail,
+      doctorName: doctor?.name,
+      hospitalName: hospital?.name,
+      appointmentDate: appointment.appointmentDate,
+      remainingAmount,
+      paymentLink: session.url,
+    });
+
+    if (!emailResult.success) {
+      return res.status(500).json({ error: emailResult.error || 'Failed to send payment link email' });
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      emitPaymentEvent(io, 'paymentLinkSent', {
+        appointmentId: appointment._id,
+        hospitalId: appointment.hospitalId,
+        userId: appointment.userId,
+        remainingAmount,
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Remaining payment link sent successfully',
+      data: {
+        appointmentId: appointment._id,
+        remainingAmount,
+      },
+    });
+  } catch (error) {
+    console.error('Error sending remaining payment link:', error);
+    return res.status(500).json({ error: error.message || 'Failed to send remaining payment link' });
   }
 };
 

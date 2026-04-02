@@ -48,7 +48,7 @@ import {
   Phone,
   Loader2,
 } from "lucide-react";
-import { appointmentAPI, doctorAPI } from "@/lib/api";
+import { appointmentAPI, doctorAPI, paymentAPI } from "@/lib/api";
 import { validateEmail, validatePhone, validateFutureDate, validateTime } from "@/lib/validation";
 import { useSocket } from "@/lib/useSocket";
 
@@ -367,13 +367,21 @@ export default function AppointmentsPage() {
       setMutationError(null);
 
       const appointmentIdToUse = appointmentId;
-      await appointmentAPI.updateStatus(appointmentIdToUse, newStatus);
+      const response = await appointmentAPI.updateStatus(appointmentIdToUse, newStatus);
+      const updated = (response.data as any) || {};
+
+      const updatedFields = {
+        status: normalizeStatus(updated.status || newStatus),
+        paymentStatus: updated.paymentStatus,
+        paymentAmount: updated.paymentAmount,
+        consultationFee: updated.consultationFee,
+      };
 
       // Update local state
       setAppointments(
         appointments.map((a) => {
           if ((a._id || a.id) === appointmentIdToUse) {
-            return { ...a, status: newStatus };
+            return { ...a, ...updatedFields };
           }
           return a;
         })
@@ -381,12 +389,63 @@ export default function AppointmentsPage() {
 
       // Update selected appointment if viewing
       if (selectedAppointment && (selectedAppointment._id || selectedAppointment.id) === appointmentIdToUse) {
-        setSelectedAppointment({ ...selectedAppointment, status: newStatus });
+        setSelectedAppointment({ ...selectedAppointment, ...updatedFields });
       }
     } catch (err: any) {
       console.error("Error updating status:", err);
       setMutationError(
         err.message || "Failed to update status. Please try again."
+      );
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleMarkFullyPaid = async (appointmentId: string) => {
+    try {
+      setIsMutating(true);
+      setMutationError(null);
+
+      const response = await appointmentAPI.markFullyPaid(appointmentId);
+      const updated = (response.data as any) || {};
+
+      const updatedFields = {
+        paymentStatus: updated.paymentStatus || 'paid',
+        paymentAmount: updated.paymentAmount,
+        consultationFee: updated.consultationFee,
+      };
+
+      setAppointments(
+        appointments.map((a) => {
+          if ((a._id || a.id) === appointmentId) {
+            return { ...a, ...updatedFields };
+          }
+          return a;
+        })
+      );
+
+      if (selectedAppointment && (selectedAppointment._id || selectedAppointment.id) === appointmentId) {
+        setSelectedAppointment({ ...selectedAppointment, ...updatedFields });
+      }
+    } catch (err: any) {
+      console.error("Error marking appointment as fully paid:", err);
+      setMutationError(
+        err.message || "Failed to mark appointment as fully paid. Please try again."
+      );
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleSendPaymentLink = async (appointmentId: string) => {
+    try {
+      setIsMutating(true);
+      setMutationError(null);
+      await paymentAPI.sendRemainingPaymentLink(appointmentId);
+    } catch (err: any) {
+      console.error("Error sending payment link:", err);
+      setMutationError(
+        err.message || "Failed to send payment link. Please try again."
       );
     } finally {
       setIsMutating(false);
@@ -560,6 +619,18 @@ export default function AppointmentsPage() {
                   </DropdownMenuItem>
                 </>
               )}
+              {appointment.status !== "Cancelled" &&
+                appointment.paymentStatus !== "paid" &&
+                appointment.consultationFee != null &&
+                appointment.paymentAmount != null &&
+                appointment.consultationFee > appointment.paymentAmount && (
+                  <DropdownMenuItem
+                    onClick={() => handleSendPaymentLink((appointment._id || appointment.id)!)}
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    Send Payment Link
+                  </DropdownMenuItem>
+                )}
               {appointment.status !== "Cancelled" && (
                 <DropdownMenuItem
                   className="text-destructive"
@@ -870,7 +941,6 @@ export default function AppointmentsPage() {
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="sm:max-w-[500px]" title="Appointment Details">
           <DialogHeader>
-            <DialogTitle>Appointment Details</DialogTitle>
           </DialogHeader>
 
           {selectedAppointment && (
@@ -973,6 +1043,32 @@ export default function AppointmentsPage() {
           )}
 
           <DialogFooter>
+            {selectedAppointment && selectedAppointment.paymentStatus !== "paid" && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    handleMarkFullyPaid(selectedAppointment._id || selectedAppointment.id || "")
+                  }
+                  disabled={isMutating}
+                >
+                  Mark as Fully Paid
+                </Button>
+                {selectedAppointment.consultationFee != null &&
+                  selectedAppointment.paymentAmount != null &&
+                  selectedAppointment.consultationFee > selectedAppointment.paymentAmount && (
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        handleSendPaymentLink(selectedAppointment._id || selectedAppointment.id || "")
+                      }
+                      disabled={isMutating}
+                    >
+                      Send Payment Link
+                    </Button>
+                  )}
+              </div>
+            )}
             {selectedAppointment && selectedAppointment.status !== "Cancelled" && (
               <Select
                 value={selectedAppointment.status}

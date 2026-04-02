@@ -288,6 +288,12 @@ export const appointmentAPI = {
     });
   },
 
+  markFullyPaid: async (appointmentId: string) => {
+    return fetchAPI(`/appointments/${appointmentId}/payment/fully-paid`, {
+      method: 'PUT',
+    });
+  },
+
   cancel: async (appointmentId: string) => {
     return fetchAPI(`/appointments/${appointmentId}/cancel`, {
       method: 'PUT',
@@ -684,7 +690,7 @@ export const superAdminAPI = {
     firstName: string;
     lastName: string;
     email: string;
-    hospitalId?: string;
+    subject: string;
     message: string;
   }) => {
     return fetchAPI('/super-admin/website-contact-forms', {
@@ -772,6 +778,12 @@ export const paymentAPI = {
       skipAuth: true,
     });
   },
+
+  sendRemainingPaymentLink: async (appointmentId: string) => {
+    return fetchAPI(`/payments/appointments/${appointmentId}/send-remaining-link`, {
+      method: 'POST',
+    });
+  },
 };
 
 // Subscription API calls (Stripe subscriptions)
@@ -799,7 +811,8 @@ export const subscriptionAPI = {
 
   // Get subscription details for a hospital
   getSubscriptionDetails: async (hospitalId: string) => {
-    return fetchAPI(`/subscriptions/details/${hospitalId}`, {
+    const nonce = Date.now();
+    return fetchAPI(`/subscriptions/details/${hospitalId}?_t=${nonce}`, {
       method: 'GET',
     });
   },
@@ -816,6 +829,13 @@ export const subscriptionAPI = {
     return fetchAPI(`/subscriptions/update-plan/${hospitalId}`, {
       method: 'PUT',
       body: JSON.stringify({ newPlanType }),
+    });
+  },
+
+  // Confirm subscription checkout session after redirect
+  confirmCheckoutSession: async (sessionId: string) => {
+    return fetchAPI(`/subscriptions/confirm/${sessionId}`, {
+      method: 'GET',
     });
   },
 };

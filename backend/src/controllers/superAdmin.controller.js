@@ -8,9 +8,22 @@ import Admin from '../models/admin.model.js';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { notifySuperAdmins } from '../services/adminNotification.service.js';
-import { sendSuperAdminNotificationEmail } from '../services/email.service.js';
+import { sendSuperAdminNotificationEmail, sendWebsiteContactResponseEmail } from '../services/email.service.js';
 import { buildSubscriptionSnapshot } from '../services/subscription.service.js';
 import { getMonthlyPlanPrice } from '../utils/subscriptionPlans.js';
+
+const formatAppointmentTime = (appointmentDate) => {
+  if (!appointmentDate) return '';
+
+  const date = new Date(appointmentDate);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+};
 
 // Get super admin dashboard statistics
 export const getSuperAdminStats = async (req, res) => {
@@ -538,7 +551,8 @@ export const getAllAppointments = async (req, res) => {
           hospitalName: apt.hospitalId?.name,
           hospitalEmail: apt.hospitalId?.email,
           appointmentDate: apt.appointmentDate,
-          timeSlot: apt.timeSlot,
+          timeSlot: formatAppointmentTime(apt.appointmentDate),
+          appointmentTime: formatAppointmentTime(apt.appointmentDate),
           status: apt.status,
           notes: apt.notes,
           createdAt: apt.createdAt,
@@ -789,7 +803,7 @@ export const getPlatformSummary = async (req, res) => {
 // Submit website contact form (public endpoint)
 export const submitWebsiteContactForm = async (req, res) => {
   try {
-    const { firstName, lastName, email, hospitalId, message } = req.body;
+    const { firstName, lastName, email, hospitalId, subject, message } = req.body;
 
     const escapeHtml = (value) =>
       String(value)
@@ -817,6 +831,7 @@ export const submitWebsiteContactForm = async (req, res) => {
       lastName,
       email,
       hospitalName,
+      subject: subject?.trim() || 'General Inquiry',
       message,
     });
 
@@ -824,6 +839,7 @@ export const submitWebsiteContactForm = async (req, res) => {
 
     const fullName = `${firstName} ${lastName}`.trim();
     const safeHospitalName = hospitalName || 'Not provided';
+    const safeSubject = escapeHtml(subject?.trim() || 'General Inquiry');
     const safeFullName = escapeHtml(fullName);
     const safeEmail = escapeHtml(email);
     const safeHospital = escapeHtml(safeHospitalName);
@@ -839,6 +855,7 @@ export const submitWebsiteContactForm = async (req, res) => {
           <p style="margin: 0 0 8px;"><strong>Name:</strong> ${safeFullName}</p>
           <p style="margin: 0 0 8px;"><strong>Email:</strong> ${safeEmail}</p>
           <p style="margin: 0 0 8px;"><strong>Hospital:</strong> ${safeHospital}</p>
+          <p style="margin: 0 0 8px;"><strong>Subject:</strong> ${safeSubject}</p>
           <p style="margin: 0 0 8px;"><strong>Submitted At:</strong> ${new Date(contactForm.createdAt).toLocaleString()}</p>
           <p style="margin: 12px 0 4px;"><strong>Message:</strong></p>
           <p style="margin: 0; white-space: pre-wrap;">${safeMessage}</p>
@@ -941,6 +958,11 @@ export const updateWebsiteContactFormStatus = async (req, res) => {
     const { formId } = req.params;
     const { status, isStarred, response } = req.body;
 
+    const existingContactForm = await WebsiteContactForm.findById(formId);
+    if (!existingContactForm) {
+      return res.status(404).json({ error: 'Contact form not found' });
+    }
+
     const updateData = {};
 
     if (status !== undefined) {
@@ -955,7 +977,25 @@ export const updateWebsiteContactFormStatus = async (req, res) => {
     }
 
     if (response !== undefined) {
-      updateData.response = response;
+      const trimmedResponse = String(response).trim();
+      if (!trimmedResponse) {
+        return res.status(400).json({ error: 'Response message cannot be empty' });
+      }
+
+      const emailResult = await sendWebsiteContactResponseEmail({
+        to: existingContactForm.email,
+        fullName: `${existingContactForm.firstName} ${existingContactForm.lastName}`.trim(),
+        subject: existingContactForm.subject || 'General Inquiry',
+        response: trimmedResponse,
+      });
+
+      if (!emailResult.success) {
+        return res.status(500).json({
+          error: emailResult.error || 'Failed to send reply email',
+        });
+      }
+
+      updateData.response = trimmedResponse;
       updateData.respondedAt = new Date();
       updateData.respondedBy = req.user._id;
       updateData.status = 'responded';
@@ -966,10 +1006,6 @@ export const updateWebsiteContactFormStatus = async (req, res) => {
       updateData,
       { new: true }
     );
-
-    if (!contactForm) {
-      return res.status(404).json({ error: 'Contact form not found' });
-    }
 
     res.status(200).json({
       message: 'Contact form updated successfully',

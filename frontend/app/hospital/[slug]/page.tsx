@@ -126,6 +126,19 @@ interface HospitalData {
   emergencyDepartment?: boolean;
 }
 
+interface SubscriptionInfo {
+  status?: string;
+  effectivePlan?: string | null;
+  hasAccess: boolean;
+  planDetails?: {
+    id?: string;
+    name?: string;
+    features?: string[];
+  } | null;
+  trialEndDate?: string | null;
+  subscriptionEndDate?: string | null;
+}
+
 export default function HospitalPublicPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -135,6 +148,7 @@ export default function HospitalPublicPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
@@ -237,11 +251,17 @@ export default function HospitalPublicPage() {
       setIsLoading(true);
       setError(null);
       const response = await hospitalAPI.getBySlug(slug);
-      const data = response.data as { hospital: HospitalData; doctors: Doctor[]; services: Service[] };
+      const data = response.data as {
+        hospital: HospitalData;
+        doctors: Doctor[];
+        services: Service[];
+        subscription?: SubscriptionInfo;
+      };
       if (data) {
         setHospital(data.hospital);
         setDoctors(data.doctors || []);
         setServices(data.services || []);
+        setSubscription(data.subscription || null);
         if (data.hospital._id) {
           try {
             const schedulesResponse = await scheduleAPI.getPublicByHospital(data.hospital._id);
@@ -443,6 +463,7 @@ export default function HospitalPublicPage() {
       </div>
     );
   }
+  const hasSubscriptionAccess = subscription?.hasAccess ?? true;
 
   if (error || !hospital) {
     return (
@@ -904,60 +925,62 @@ export default function HospitalPublicPage() {
 
             {/* Contact Tab */}
             <TabsContent value="contact" id="contact" className="space-y-6">
-              <div className="grid lg:grid-cols-2 gap-8 items-stretch">
+              <div className={hasSubscriptionAccess ? "grid lg:grid-cols-2 gap-8 items-stretch" : "grid grid-cols-1 gap-8 items-stretch"}>
                 {/* Contact Form */}
-                <Card className="border-0 shadow-lg flex flex-col">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-2">
-                      <Send className="h-5 w-5 text-primary" />
-                      Send us a Message
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex-1 flex flex-col">
-                    <form onSubmit={handleContactSubmit} className="flex flex-col flex-1 gap-4">
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="name">Full Name</Label>
-                          <Input id="name" placeholder="John Doe" value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })} required className="h-11" />
+                {hasSubscriptionAccess && (
+                  <Card className="border-0 shadow-lg flex flex-col">
+                    <CardHeader className="pb-4">
+                      <CardTitle className="flex items-center gap-2">
+                        <Send className="h-5 w-5 text-primary" />
+                        Send us a Message
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-1 flex flex-col">
+                      <form onSubmit={handleContactSubmit} className="flex flex-col flex-1 gap-4">
+                        <div className="grid sm:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="name">Full Name</Label>
+                            <Input id="name" placeholder="John Doe" value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })} required className="h-11" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="email">Email</Label>
+                            <Input id="email" type="email" placeholder="john@example.com" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} required className="h-11" />
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="email">Email</Label>
-                          <Input id="email" type="email" placeholder="john@example.com" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} required className="h-11" />
+                        <div className="grid sm:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="phone">Phone</Label>
+                            <Input id="phone" placeholder="+977 98XXXXXXXX" value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} className="h-11" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="subject">Subject</Label>
+                            <Input id="subject" placeholder="Inquiry about..." value={contactForm.subject} onChange={(e) => setContactForm({ ...contactForm, subject: e.target.value })} required className="h-11" />
+                          </div>
                         </div>
-                      </div>
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="phone">Phone</Label>
-                          <Input id="phone" placeholder="+977 98XXXXXXXX" value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} className="h-11" />
+                        <div className="space-y-2 flex-1 flex flex-col">
+                          <Label htmlFor="message">Message</Label>
+                          <Textarea id="message" placeholder="Your message..." value={contactForm.message} onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })} required className="flex-1 min-h-[120px] resize-none" />
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="subject">Subject</Label>
-                          <Input id="subject" placeholder="Inquiry about..." value={contactForm.subject} onChange={(e) => setContactForm({ ...contactForm, subject: e.target.value })} required className="h-11" />
-                        </div>
-                      </div>
-                      <div className="space-y-2 flex-1 flex flex-col">
-                        <Label htmlFor="message">Message</Label>
-                        <Textarea id="message" placeholder="Your message..." value={contactForm.message} onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })} required className="flex-1 min-h-[120px] resize-none" />
-                      </div>
-                      {submitSuccess && (
-                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-700 text-sm">
-                          <CheckCircle className="h-4 w-4" />
-                          Message sent successfully!
-                        </div>
-                      )}
-                      {submitError && (
-                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
-                          <AlertCircle className="h-4 w-4" />
-                          {submitError}
-                        </div>
-                      )}
-                      <Button type="submit" className="w-full h-11" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                        Send Message
-                      </Button>
-                    </form>
-                  </CardContent>
-                </Card>
+                        {submitSuccess && (
+                          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-700 text-sm">
+                            <CheckCircle className="h-4 w-4" />
+                            Message sent successfully!
+                          </div>
+                        )}
+                        {submitError && (
+                          <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+                            <AlertCircle className="h-4 w-4" />
+                            {submitError}
+                          </div>
+                        )}
+                        <Button type="submit" className="w-full h-11" disabled={isSubmitting}>
+                          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                          Send Message
+                        </Button>
+                      </form>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Map & Info */}
                 <div className="flex flex-col gap-6">
@@ -1249,7 +1272,7 @@ export default function HospitalPublicPage() {
       </Dialog>
 
       {/* Chat Widget */}
-      {hospital && (
+      {hospital && hasSubscriptionAccess && (
         <ChatWidget
           hospitalId={hospital._id}
           hospitalName={hospital.name}

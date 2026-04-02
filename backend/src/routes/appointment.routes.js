@@ -6,6 +6,7 @@ import {
   getAppointmentsByHospital,
   updateAppointmentStatus,
   cancelAppointment,
+  markAppointmentFullyPaid,
   getAvailableSlots,
   getAppointmentById,
   getPatients,
@@ -35,6 +36,7 @@ router.get('/patients/:hospitalId/:patientEmail', authenticate, requireHospitalS
 
 // Admin routes
 router.put('/:appointmentId/status', authenticate, requireHospitalSubscription, updateAppointmentStatus);
+router.put('/:appointmentId/payment/fully-paid', authenticate, requireHospitalSubscription, markAppointmentFullyPaid);
 router.put('/:appointmentId/cancel', authenticate, requireHospitalSubscription, cancelAppointment);
 
 export default router;

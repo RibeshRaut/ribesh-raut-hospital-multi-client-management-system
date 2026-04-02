@@ -1,6 +1,7 @@
 import Appointment from '../models/appointment.model.js';
 import Doctor from '../models/doctor.model.js';
 import Hospital from '../models/hospital.model.js';
+import Schedule from '../models/schedule.model.js';
 import {
   createAppointmentSchema,
   updateAppointmentStatusSchema,
@@ -257,9 +258,19 @@ export const updateAppointmentStatus = async (req, res) => {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
     }
 
+    const updateData = { status: normalizedStatus };
+
+    if (normalizedStatus === 'completed' && ['pending', 'half_paid'].includes(appointment.paymentStatus)) {
+      const consultationFee = Number(appointment.consultationFee || 0);
+      if (consultationFee > 0) {
+        updateData.paymentStatus = 'paid';
+        updateData.paymentAmount = consultationFee;
+      }
+    }
+
     const updatedAppointment = await Appointment.findByIdAndUpdate(
       appointmentId,
-      { status: normalizedStatus },
+      updateData,
       { new: true }
     )
       .populate('doctorId')
@@ -386,12 +397,66 @@ export const cancelAppointment = async (req, res) => {
   }
 };
 
+export const markAppointmentFullyPaid = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    if (req.user.userType === 'hospital_admin' && req.user.hospitalId !== appointment.hospitalId.toString()) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const consultationFee = Number(appointment.consultationFee || 0);
+    const nextPaymentAmount = consultationFee > 0 ? consultationFee : Number(appointment.paymentAmount || 0);
+
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+      appointmentId,
+      {
+        paymentStatus: 'paid',
+        paymentAmount: nextPaymentAmount,
+      },
+      { new: true }
+    )
+      .populate('doctorId')
+      .populate('hospitalId');
+
+    res.status(200).json({
+      message: 'Appointment marked as fully paid successfully',
+      data: updatedAppointment,
+    });
+  } catch (error) {
+    console.error('Error marking appointment as fully paid:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const getAvailableSlots = async (req, res) => {
   try {
     const { doctorId, date } = req.query;
 
     if (!doctorId || !date) {
       return res.status(400).json({ error: 'Doctor ID and date are required' });
+    }
+
+    const schedule = await Schedule.findOne({ doctorId, status: 'Active' });
+    if (!schedule) {
+      return res.status(200).json([]);
+    }
+
+    const requestedDate = new Date(date);
+    const requestedDayName = requestedDate.toLocaleDateString('en-US', { weekday: 'long' });
+    const normalizedRequestedDay = requestedDayName.toLowerCase();
+    const isDoctorWorkingOnDay = (schedule.days || []).some((day) => {
+      const normalizedDay = String(day).toLowerCase();
+      return normalizedDay === normalizedRequestedDay || normalizedDay.slice(0, 3) === normalizedRequestedDay.slice(0, 3);
+    });
+
+    if (!isDoctorWorkingOnDay) {
+      return res.status(200).json([]);
     }
 
     const startOfDay = new Date(date);
@@ -408,37 +473,40 @@ export const getAvailableSlots = async (req, res) => {
       status: { $in: ['confirmed', 'pending'] },
     });
 
-    // Generate available slots (e.g., hourly slots from 9 AM to 5 PM)
+    // Generate available slots from doctor's configured schedule
     const availableSlots = [];
-    const workingHours = {
-      start: 9,
-      end: 17,
-    };
+    const slotDuration = Number(schedule.slotDuration) || 30;
+    const [startHour, startMinute] = String(schedule.startTime || '09:00').split(':').map(Number);
+    const [endHour, endMinute] = String(schedule.endTime || '17:00').split(':').map(Number);
 
-    for (let hour = workingHours.start; hour < workingHours.end; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        const slotTime = new Date(date);
-        slotTime.setHours(hour, minute, 0, 0);
+    let slotTime = new Date(date);
+    slotTime.setHours(startHour, startMinute, 0, 0);
 
-        let isAvailable = true;
-        for (const appointment of appointments) {
-          const appointmentEnd = new Date(appointment.appointmentDate.getTime() + appointment.duration * 60000);
-          if (slotTime >= appointment.appointmentDate && slotTime < appointmentEnd) {
-            isAvailable = false;
-            break;
-          }
-        }
+    const scheduleEndTime = new Date(date);
+    scheduleEndTime.setHours(endHour, endMinute, 0, 0);
 
-        if (isAvailable) {
-          // Format time as HH:MM for consistency
-          const formattedTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-          availableSlots.push({
-            time: formattedTime,
-            label: formattedTime,
-            isoTime: slotTime.toISOString(),
-          });
+    while (slotTime < scheduleEndTime) {
+      let isAvailable = true;
+      for (const appointment of appointments) {
+        const appointmentEnd = new Date(appointment.appointmentDate.getTime() + appointment.duration * 60000);
+        if (slotTime >= appointment.appointmentDate && slotTime < appointmentEnd) {
+          isAvailable = false;
+          break;
         }
       }
+
+      if (isAvailable) {
+        const hour = slotTime.getHours();
+        const minute = slotTime.getMinutes();
+        const formattedTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        availableSlots.push({
+          time: formattedTime,
+          label: formattedTime,
+          isoTime: slotTime.toISOString(),
+        });
+      }
+
+      slotTime = new Date(slotTime.getTime() + slotDuration * 60000);
     }
 
     res.status(200).json(availableSlots);

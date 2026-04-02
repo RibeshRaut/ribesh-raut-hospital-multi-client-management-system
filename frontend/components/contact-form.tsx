@@ -1,20 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, CheckCircle2 } from "lucide-react";
-import { APIError, hospitalAPI, superAdminAPI } from "@/lib/api";
-
-interface Hospital {
-  _id: string;
-  name: string;
-}
+import { APIError, superAdminAPI } from "@/lib/api";
 
 export function ContactForm() {
-  const [hospitals, setHospitals] = useState<Hospital[]>([]);
-  const [isLoadingHospitals, setIsLoadingHospitals] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,38 +16,15 @@ export function ContactForm() {
     firstName: "",
     lastName: "",
     email: "",
-    hospitalId: "",
+    subject: "",
     message: "",
   });
-
-  useEffect(() => {
-    fetchHospitals();
-  }, []);
-
-  const fetchHospitals = async () => {
-    try {
-      setIsLoadingHospitals(true);
-      const response = await hospitalAPI.getAll();
-      if (response.data) {
-        const hospitalList = (response.data as any).hospitals || response.data || [];
-        setHospitals(hospitalList);
-      }
-    } catch (err: unknown) {
-      if (err instanceof APIError && err.status === 503) {
-        setHospitals([]);
-        return;
-      }
-      console.warn("Could not load hospitals list");
-    } finally {
-      setIsLoadingHospitals(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.message) {
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.subject || !formData.message) {
       setError("Please fill in all required fields");
       return;
     }
@@ -65,7 +35,7 @@ export function ContactForm() {
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
-        hospitalId: formData.hospitalId || undefined,
+        subject: formData.subject,
         message: formData.message,
       });
 
@@ -74,7 +44,7 @@ export function ContactForm() {
         firstName: "",
         lastName: "",
         email: "",
-        hospitalId: "",
+        subject: "",
         message: "",
       });
 
@@ -151,6 +121,19 @@ export function ContactForm() {
               value={formData.email}
               onChange={(e) =>
                 setFormData({ ...formData, email: e.target.value })
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              Subject <span className="text-red-500">*</span>
+            </label>
+            <Input
+              placeholder="How can we help you?"
+              value={formData.subject}
+              onChange={(e) =>
+                setFormData({ ...formData, subject: e.target.value })
               }
               required
             />

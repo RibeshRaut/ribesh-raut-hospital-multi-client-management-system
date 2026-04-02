@@ -74,6 +74,64 @@ export const sendSuperAdminNotificationEmail = async ({ to, subject, html, text 
   }
 };
 
+export const sendWebsiteContactResponseEmail = async ({
+  to,
+  fullName,
+  subject,
+  response,
+}) => {
+  try {
+    if (!to) {
+      return {
+        success: false,
+        error: 'Recipient email is required',
+        message: 'Recipient email is required',
+      };
+    }
+
+    const transporter = createTransporter();
+    const safeName = fullName || 'there';
+    const safeSubject = subject || 'General Inquiry';
+
+    const htmlTemplate = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #111827; color: #ffffff; padding: 20px; border-radius: 8px 8px 0 0;">
+          <h2 style="margin: 0;">Response to your inquiry</h2>
+        </div>
+        <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+          <p style="margin: 0 0 16px; color: #111827;">Hi ${safeName},</p>
+          <p style="margin: 0 0 12px; color: #374151;">Thanks for reaching out. Here is our response to your message regarding <strong>${safeSubject}</strong>:</p>
+          <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px; white-space: pre-wrap; color: #111827;">
+            ${response}
+          </div>
+          <p style="margin: 16px 0 0; color: #6b7280; font-size: 13px;">This email was sent by the super admin team.</p>
+        </div>
+      </div>
+    `;
+
+    const result = await transporter.sendMail({
+      from: EMAIL_FROM,
+      to,
+      subject: `Re: ${safeSubject}`,
+      text: `Hi ${safeName},\n\nThanks for reaching out. Here is our response:\n\n${response}\n\nRegards,\nSuper Admin Team`,
+      html: htmlTemplate,
+    });
+
+    return {
+      success: true,
+      messageId: result.messageId,
+      message: 'Website contact response email sent successfully',
+    };
+  } catch (error) {
+    console.error('Error sending website contact response email:', error);
+    return {
+      success: false,
+      error: error?.message || 'Failed to send website contact response email',
+      message: 'Failed to send website contact response email',
+    };
+  }
+};
+
 // Send confirmation email to PATIENT when appointment is confirmed
 export const sendAppointmentConfirmationToPatient = async (emailData) => {
   try {
@@ -642,6 +700,81 @@ export const sendPaymentReceiptToPatient = async (emailData) => {
       success: false,
       error: error.message,
       message: 'Failed to send payment receipt email',
+    };
+  }
+};
+
+export const sendRemainingPaymentLinkToPatient = async (emailData) => {
+  try {
+    const {
+      patientName,
+      patientEmail,
+      appointmentDate,
+      doctorName,
+      hospitalName,
+      remainingAmount,
+      paymentLink,
+    } = emailData;
+
+    const transporter = createTransporter();
+
+    const formattedDate = new Date(appointmentDate).toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const htmlTemplate = `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+        <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 32px 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0; color: white; font-size: 26px; font-weight: 600;">Remaining Payment Due</h1>
+          <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 15px;">Please complete your appointment payment</p>
+        </div>
+
+        <div style="padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
+          <p style="font-size: 16px; color: #374151; margin: 0 0 18px 0;">Dear <strong>${patientName}</strong>,</p>
+          <p style="color: #6b7280; line-height: 1.7; margin: 0 0 20px 0;">
+            Your appointment with <strong>Dr. ${doctorName || 'Doctor'}</strong> at <strong>${hospitalName || 'Hospital'}</strong> has a remaining balance.
+          </p>
+
+          <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 18px; margin-bottom: 24px;">
+            <p style="margin: 0 0 8px 0; color: #9a3412;"><strong>Appointment:</strong> ${formattedDate}</p>
+            <p style="margin: 0; color: #9a3412;"><strong>Amount Due:</strong> $${Number(remainingAmount || 0).toFixed(2)}</p>
+          </div>
+
+          <div style="text-align: center; margin: 22px 0 26px;">
+            <a href="${paymentLink}" style="display: inline-block; background: #2563eb; color: #fff; text-decoration: none; padding: 12px 22px; border-radius: 8px; font-weight: 600;">Pay Remaining Amount</a>
+          </div>
+
+          <p style="color: #6b7280; font-size: 13px; line-height: 1.6; margin: 0;">
+            If the button does not work, copy and paste this link in your browser:<br/>
+            <span style="word-break: break-all; color: #2563eb;">${paymentLink}</span>
+          </p>
+        </div>
+      </div>
+    `;
+
+    const result = await transporter.sendMail({
+      from: EMAIL_FROM,
+      to: patientEmail,
+      subject: `Payment Reminder - ${hospitalName || 'Hospital'} Appointment`,
+      html: htmlTemplate,
+    });
+
+    return {
+      success: true,
+      messageId: result.messageId,
+      message: 'Remaining payment link email sent successfully',
+    };
+  } catch (error) {
+    console.error('Error sending remaining payment link email:', error);
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to send remaining payment link email',
     };
   }
 };

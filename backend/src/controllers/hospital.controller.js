@@ -1,4 +1,8 @@
 import Hospital from '../models/hospital.model.js';
+import {
+  buildSubscriptionSnapshot,
+  evaluateAndSyncSubscriptionState,
+} from '../services/subscription.service.js';
 
 export const getHospitalById = async (req, res) => {
   try {
@@ -315,6 +319,9 @@ export const getHospitalBySlug = async (req, res) => {
       return res.status(404).json({ error: 'Hospital not found' });
     }
 
+    const subscriptionContext = await evaluateAndSyncSubscriptionState(hospital);
+    const subscriptionSnapshot = buildSubscriptionSnapshot(subscriptionContext.hospital);
+
     // Get additional data for public display
     const Doctor = (await import('../models/doctor.model.js')).default;
     const Service = (await import('../models/service.model.js')).default;
@@ -335,6 +342,14 @@ export const getHospitalBySlug = async (req, res) => {
         hospital,
         doctors,
         services,
+        subscription: {
+          status: subscriptionSnapshot.status,
+          effectivePlan: subscriptionSnapshot.effectivePlan,
+          hasAccess: subscriptionSnapshot.hasAccess,
+          planDetails: subscriptionSnapshot.planDetails,
+          trialEndDate: subscriptionSnapshot.trialEndDate,
+          subscriptionEndDate: subscriptionSnapshot.subscriptionEndDate,
+        },
       },
     });
   } catch (error) {

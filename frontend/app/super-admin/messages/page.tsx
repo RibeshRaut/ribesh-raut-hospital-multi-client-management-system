@@ -34,7 +34,6 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
-  Building2,
   Mail,
   Star,
   Clock,
@@ -487,10 +486,6 @@ export default function WebsiteMessagesPage() {
                 <div>
                   <p className="font-medium text-muted-foreground">Email</p>
                   <p>{selectedMessage.email}</p>
-                </div>
-                <div>
-                  <p className="font-medium text-muted-foreground">Hospital</p>
-                  <p>{selectedMessage.hospitalName || "N/A"}</p>
                 </div>
                 <div>
                   <p className="font-medium text-muted-foreground">Date</p>
