@@ -353,13 +353,12 @@ export const switchToAIChat = async (hospitalId, sessionId) => {
   }
 };
 
-// Get all chats waiting for human support (for admin)
+// Get all human chats (for admin)
 export const getWaitingChats = async (hospitalId) => {
   try {
     const chats = await Chat.find({
       hospitalId,
       chatType: 'human',
-      status: { $in: ['waiting', 'active'] },
     }).sort({ lastActivity: -1 });
 
     return chats.map(chat => ({
@@ -379,6 +378,39 @@ export const getWaitingChats = async (hospitalId) => {
     }));
   } catch (error) {
     console.error('Error getting waiting chats:', error);
+    throw error;
+  }
+};
+
+// Close chat when visitor leaves the site
+export const closeVisitorChatSession = async (hospitalId, sessionId) => {
+  try {
+    const chatSession = await Chat.findOne({
+      hospitalId,
+      sessionId,
+      chatType: 'human',
+      status: { $in: ['waiting', 'active'] },
+    });
+
+    if (!chatSession) {
+      return null;
+    }
+
+    chatSession.status = 'closed';
+    chatSession.lastActivity = new Date();
+    chatSession.messages.push({
+      role: 'assistant',
+      content: 'Visitor left the site. Chat closed automatically.',
+      timestamp: new Date(),
+      readByAdmin: true,
+      readByUser: true,
+    });
+
+    await chatSession.save();
+
+    return chatSession;
+  } catch (error) {
+    console.error('Error closing visitor chat session:', error);
     throw error;
   }
 };

@@ -422,13 +422,13 @@ export default function HospitalsPage() {
               Are you sure you want to delete{" "}
               <strong>{selectedHospital?.name}</strong>? This action cannot be
               undone and will remove:
-              <ul className="list-disc list-inside mt-2 text-sm">
-                <li>All doctors associated with this hospital</li>
-                <li>All appointments and patient records</li>
-                <li>All services and schedules</li>
-                <li>All contact form submissions</li>
-              </ul>
             </DialogDescription>
+            <ul className="list-disc list-inside mt-2 text-sm text-muted-foreground">
+              <li>All doctors associated with this hospital</li>
+              <li>All appointments and patient records</li>
+              <li>All services and schedules</li>
+              <li>All contact form submissions</li>
+            </ul>
           </DialogHeader>
           <DialogFooter>
             <Button

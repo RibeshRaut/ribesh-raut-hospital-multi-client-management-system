@@ -87,6 +87,11 @@ const normalizeMessage = (message: unknown): Message => {
 
 const normalizeChat = (chat: unknown): ChatSession => {
   const source = asRecord(chat);
+  const normalizedId =
+    (typeof source._id === "string" && source._id) ||
+    (typeof source.chatId === "string" && source.chatId) ||
+    (typeof source.sessionId === "string" && `session:${source.sessionId}`) ||
+    `chat:${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
   const sourceMessages = Array.isArray(source.messages) ? source.messages : [];
   const normalizedMessages = sourceMessages
     ? sourceMessages.map((message) => normalizeMessage(message))
@@ -110,6 +115,7 @@ const normalizeChat = (chat: unknown): ChatSession => {
 
   return {
     ...(source as unknown as ChatSession),
+    _id: normalizedId,
     messages: normalizedMessages,
     lastMessage: normalizedLastMessage,
     createdAt,
@@ -187,6 +193,45 @@ export default function ChatsPage() {
       });
     });
 
+    socketInstance.on("chat:newWaiting", (payload) => {
+      const payloadRecord = asRecord(payload);
+      const incomingChat = payloadRecord.chat ?? payload;
+      const normalizedChat = normalizeChat(incomingChat);
+
+      setChats((prev) => {
+        const exists = prev.find((chat) => chat._id === normalizedChat._id);
+        if (exists) {
+          return prev.map((chat) =>
+            chat._id === normalizedChat._id
+              ? {
+                  ...chat,
+                  ...normalizedChat,
+                  messages:
+                    normalizedChat.messages.length > 0
+                      ? normalizedChat.messages
+                      : chat.messages,
+                }
+              : chat
+          );
+        }
+
+        return [normalizedChat, ...prev];
+      });
+
+      setSelectedChat((prev) =>
+        prev && prev._id === normalizedChat._id
+          ? {
+              ...prev,
+              ...normalizedChat,
+              messages:
+                normalizedChat.messages.length > 0
+                  ? normalizedChat.messages
+                  : prev.messages,
+            }
+          : prev
+      );
+    });
+
     socketInstance.on("chat:newMessage", ({ chatId, message }) => {
       const normalizedMessage = normalizeMessage(message);
       setChats((prev) =>
@@ -226,13 +271,33 @@ export default function ChatsPage() {
         ? payloadRecord.chats
         : [];
 
-      if (waitingChats.length === 0) return;
+      const normalizedWaitingChats = waitingChats.map((incomingChat) =>
+        normalizeChat(incomingChat)
+      );
+
+      setSelectedChat((prev) => {
+        if (!prev) return prev;
+
+        const updatedSelectedChat = normalizedWaitingChats.find(
+          (chat) => chat._id === prev._id
+        );
+
+        if (!updatedSelectedChat) return prev;
+
+        return {
+          ...prev,
+          ...updatedSelectedChat,
+          messages:
+            updatedSelectedChat.messages.length > 0
+              ? updatedSelectedChat.messages
+              : prev.messages,
+        };
+      });
 
       setChats((prev) => {
         const chatMap = new Map(prev.map((chat) => [chat._id, chat]));
 
-        waitingChats.forEach((incomingChat) => {
-          const normalizedChat = normalizeChat(incomingChat);
+        normalizedWaitingChats.forEach((normalizedChat) => {
           const existing = chatMap.get(normalizedChat._id);
           chatMap.set(normalizedChat._id, {
             ...(existing || normalizedChat),

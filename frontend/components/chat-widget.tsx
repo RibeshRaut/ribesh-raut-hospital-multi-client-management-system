@@ -5,7 +5,6 @@ import { io, Socket } from "socket.io-client";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -33,6 +32,12 @@ interface ChatWidgetProps {
   hospitalName: string;
 }
 
+interface SessionMessagePayload {
+  role: Message["role"];
+  content: string;
+  timestamp: string | number | Date;
+}
+
 type ChatMode = "selection" | "ai" | "human";
 
 export function ChatWidget({ hospitalId, hospitalName }: ChatWidgetProps) {
@@ -52,20 +57,12 @@ export function ChatWidget({ hospitalId, hospitalName }: ChatWidgetProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Generate or retrieve session ID
-  useEffect(() => {
-    let storedSessionId = localStorage.getItem(`chat_session_${hospitalId}`);
-    if (!storedSessionId) {
-      storedSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem(`chat_session_${hospitalId}`, storedSessionId);
-    }
-    setSessionId(storedSessionId);
+  const createSessionId = () =>
+    `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
-    // Load stored user info
-    const storedName = localStorage.getItem(`chat_userName_${hospitalId}`);
-    const storedEmail = localStorage.getItem(`chat_userEmail_${hospitalId}`);
-    if (storedName) setUserName(storedName);
-    if (storedEmail) setUserEmail(storedEmail);
+  // Generate a fresh session ID on each page load
+  useEffect(() => {
+    setSessionId(createSessionId());
   }, [hospitalId]);
 
   // Initialize Socket.IO connection
@@ -119,35 +116,40 @@ export function ChatWidget({ hospitalId, hospitalName }: ChatWidgetProps) {
     };
   }, [sessionId, chatMode, hospitalId]);
 
+  useEffect(() => {
+    if (chatMode !== "human" || !sessionId) return;
+
+    const handlePageUnload = () => {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002/api";
+      const endpoint = `${apiUrl}/chatbot/${hospitalId}/visitor-left`;
+      const payload = JSON.stringify({ sessionId });
+
+      if (navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon(endpoint, blob);
+      } else {
+        fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+
+    window.addEventListener("beforeunload", handlePageUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handlePageUnload);
+    };
+  }, [chatMode, hospitalId, sessionId]);
+
   // Auto scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isLoading]);
-
-  // Load chat history
-  const loadChatHistory = useCallback(async () => {
-    if (!sessionId) return;
-
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002/api"}/chatbot/${hospitalId}/history?sessionId=${sessionId}`
-      );
-      const data = await response.json();
-
-      if (data.success && data.history) {
-        setMessages(
-          data.history.map((msg: any) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp),
-          }))
-        );
-      }
-    } catch (error) {
-      console.error("Error loading chat history:", error);
-    }
-  }, [hospitalId, sessionId]);
 
   // Load session status
   const loadSessionStatus = useCallback(async () => {
@@ -167,9 +169,11 @@ export function ChatWidget({ hospitalId, hospitalName }: ChatWidgetProps) {
           setChatMode("ai");
         }
         if (data.session.messages) {
+          const parsedMessages = data.session.messages as SessionMessagePayload[];
           setMessages(
-            data.session.messages.map((msg: any) => ({
-              ...msg,
+            parsedMessages.map((msg) => ({
+              role: msg.role,
+              content: msg.content,
               timestamp: new Date(msg.timestamp),
             }))
           );
@@ -216,12 +220,13 @@ export function ChatWidget({ hospitalId, hospitalName }: ChatWidgetProps) {
       } else {
         throw new Error(data.error || "Failed to get response");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "";
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: error.message?.includes("Rate limit")
+          content: errorMessage.includes("Rate limit")
             ? "You're sending messages too quickly. Please wait a moment and try again."
             : "Sorry, I'm having trouble responding right now. Please try again later.",
           timestamp: new Date(),
@@ -281,14 +286,12 @@ export function ChatWidget({ hospitalId, hospitalName }: ChatWidgetProps) {
 
   // Request human support
   const requestHumanSupport = async () => {
+    if (!sessionId) return;
+
     if (!userName.trim()) {
       setShowUserForm(true);
       return;
     }
-
-    // Save user info
-    localStorage.setItem(`chat_userName_${hospitalId}`, userName);
-    if (userEmail) localStorage.setItem(`chat_userEmail_${hospitalId}`, userEmail);
 
     setShowUserForm(false);
     setChatMode("human");
@@ -477,7 +480,7 @@ export function ChatWidget({ hospitalId, hospitalName }: ChatWidgetProps) {
               <div className="text-center mb-8">
                 <h3 className="text-lg font-semibold mb-2">Welcome! 👋</h3>
                 <p className="text-sm text-muted-foreground">
-                  Choose how you'd like to get help today
+                  Choose how you&apos;d like to get help today
                 </p>
               </div>
 

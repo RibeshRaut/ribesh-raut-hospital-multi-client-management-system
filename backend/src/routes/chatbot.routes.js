@@ -7,6 +7,7 @@ import {
   requestHuman,
   switchToAI,
   sendUserMsg,
+  visitorLeft,
   getAdminChats,
   getAdminChatById,
   adminAcceptChat,
@@ -30,6 +31,7 @@ router.get('/:hospitalId/session', requireSubscriptionByHospitalParam, getSessio
 router.post('/:hospitalId/request-human', requireSubscriptionByHospitalParam, requestHuman);
 router.post('/:hospitalId/switch-to-ai', requireSubscriptionByHospitalParam, switchToAI);
 router.post('/:hospitalId/user-message', requireSubscriptionByHospitalParam, sendUserMsg);
+router.post('/:hospitalId/visitor-left', requireSubscriptionByHospitalParam, visitorLeft);
 
 // Admin chat endpoints (requires authentication)
 router.get('/admin/chats', authenticate, requireHospitalSubscription, getAdminChats);

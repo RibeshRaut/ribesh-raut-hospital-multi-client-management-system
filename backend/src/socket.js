@@ -244,10 +244,21 @@ export const setupSocketIO = (io) => {
 
         // Notify admins of new waiting chat
         io.to(`admin:${hospitalId}`).emit('chat:newWaiting', {
-          chatId: chat._id,
-          sessionId,
-          userName: chat.userName,
-          userEmail: chat.userEmail,
+          chat: {
+            _id: chat._id,
+            sessionId: chat.sessionId,
+            hospitalId: chat.hospitalId,
+            chatType: chat.chatType,
+            userName: chat.userName,
+            userEmail: chat.userEmail,
+            status: chat.status,
+            createdAt: chat.createdAt,
+            updatedAt: chat.updatedAt,
+            lastActivity: chat.lastActivity,
+            messages: chat.messages,
+            unreadCount: chat.messages.filter(m => m.role === 'user' && !m.readByAdmin).length,
+            lastMessage: chat.messages[chat.messages.length - 1],
+          },
         });
 
         notifyAdminOfWaitingChats(io, hospitalId);
@@ -289,8 +300,17 @@ export const setupSocketIO = (io) => {
               },
               {
                 $set: {
-                  status: 'waiting',
+                  status: 'closed',
                   lastActivity: new Date(),
+                },
+                $push: {
+                  messages: {
+                    role: 'assistant',
+                    content: 'Visitor left the site. Chat closed automatically.',
+                    timestamp: new Date(),
+                    readByAdmin: true,
+                    readByUser: true,
+                  },
                 },
               },
               { new: true }
@@ -322,7 +342,6 @@ const notifyAdminOfWaitingChats = async (io, hospitalId) => {
     const waitingChats = await Chat.find({
       hospitalId,
       chatType: 'human',
-      status: { $in: ['waiting', 'active'] },
     }).sort({ lastActivity: -1 });
 
     const chatList = waitingChats.map(chat => ({

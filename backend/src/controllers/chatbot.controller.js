@@ -9,6 +9,7 @@ import {
   sendAdminMessage,
   sendUserMessage,
   closeChat,
+  closeVisitorChatSession,
   markMessagesAsRead,
   getChatById,
   getChatSession,
@@ -196,6 +197,34 @@ export const requestHuman = async (req, res) => {
 
     const result = await requestHumanChat(hospitalId, sessionId, userName, userEmail);
 
+    const io = req.app.get('io');
+    if (io && result?.chatId) {
+      const chat = await getChatById(hospitalId, result.chatId);
+      const chats = await getWaitingChats(hospitalId);
+
+      if (chat) {
+        io.to(`admin:${hospitalId}`).emit('chat:newWaiting', {
+          chat: {
+            _id: chat._id,
+            sessionId: chat.sessionId,
+            hospitalId: chat.hospitalId,
+            chatType: chat.chatType,
+            userName: chat.userName,
+            userEmail: chat.userEmail,
+            status: chat.status,
+            createdAt: chat.createdAt,
+            updatedAt: chat.updatedAt,
+            lastActivity: chat.lastActivity,
+            messages: chat.messages,
+            unreadCount: chat.messages.filter((m) => m.role === 'user' && !m.readByAdmin).length,
+            lastMessage: chat.messages[chat.messages.length - 1],
+          },
+        });
+      }
+
+      io.to(`admin:${hospitalId}`).emit('chat:waitingList', chats);
+    }
+
     res.status(200).json({
       success: true,
       ...result,
@@ -247,6 +276,33 @@ export const sendUserMsg = async (req, res) => {
   } catch (error) {
     console.error('Error sending user message:', error);
     res.status(500).json({ error: 'Failed to send message' });
+  }
+};
+
+// Mark visitor chat as closed when browser/site is closed
+export const visitorLeft = async (req, res) => {
+  try {
+    const { hospitalId } = req.params;
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required' });
+    }
+
+    const chat = await closeVisitorChatSession(hospitalId, sessionId);
+
+    const io = req.app.get('io');
+    if (io && chat) {
+      notifyAdminChats(io, hospitalId);
+    }
+
+    res.status(200).json({
+      success: true,
+      status: chat?.status || 'closed',
+    });
+  } catch (error) {
+    console.error('Error marking visitor chat as closed:', error);
+    res.status(500).json({ error: 'Failed to update visitor chat status' });
   }
 };
 
@@ -406,5 +462,14 @@ export const adminMarkRead = async (req, res) => {
   } catch (error) {
     console.error('Error marking messages as read:', error);
     res.status(500).json({ error: 'Failed to mark messages as read' });
+  }
+};
+
+const notifyAdminChats = async (io, hospitalId) => {
+  try {
+    const chats = await getWaitingChats(hospitalId);
+    io.to(`admin:${hospitalId}`).emit('chat:waitingList', chats);
+  } catch (error) {
+    console.error('Error notifying admin chats:', error);
   }
 };
