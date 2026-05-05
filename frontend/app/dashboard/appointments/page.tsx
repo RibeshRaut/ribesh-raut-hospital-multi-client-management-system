@@ -81,7 +81,7 @@ type Doctor = {
   specialty: string;
 };
 
-type AppointmentApiRecord = Appointment & {
+type AppointmentApiRecord = Omit<Appointment, "doctorId"> & {
   doctorId?: { _id?: string; name?: string } | string;
   doctorName?: string;
   userName?: string;
@@ -94,6 +94,19 @@ type AppointmentApiRecord = Appointment & {
   createdAt?: string;
   appointmentDate?: string;
   appointmentTime?: string;
+};
+
+const getDoctorDetails = (doctorId: AppointmentApiRecord["doctorId"]) => {
+  if (doctorId && typeof doctorId === "object") {
+    return {
+      id: doctorId._id,
+      name: doctorId.name,
+    };
+  }
+  return {
+    id: typeof doctorId === "string" ? doctorId : undefined,
+    name: undefined,
+  };
 };
 
 const getErrorMessage = (err: unknown, fallback: string) =>
@@ -220,21 +233,24 @@ export default function AppointmentsPage() {
       const rawAppointments = Array.isArray(response.data)
         ? (response.data as AppointmentApiRecord[])
         : [];
-      const mappedAppointments = rawAppointments.map((apt) => ({
+      const mappedAppointments = rawAppointments.map((apt) => {
+        const doctorDetails = getDoctorDetails(apt.doctorId);
+        return ({
         ...apt,
         patientName: apt.patientName || apt.userName || 'Unknown Patient',
         patientEmail: apt.patientEmail || apt.userEmail || '',
         patientPhone: apt.patientPhone || apt.userPhone || '',
         appointmentTime: apt.appointmentTime || (apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''),
         // Extract doctor name from populated doctorId object
-        doctorName: apt.doctorName || (apt.doctorId?.name) || 'Unknown Doctor',
-        doctorId: apt.doctorId?._id || apt.doctorId,
+        doctorName: apt.doctorName || doctorDetails.name || 'Unknown Doctor',
+        doctorId: doctorDetails.id,
         // Normalize status from backend lowercase to frontend capitalized
         status: normalizeStatus(apt.status),
         paymentStatus: apt.paymentStatus || 'pending',
         paymentAmount: apt.paymentAmount,
         consultationFee: apt.consultationFee,
-      }));
+        });
+      });
       // Sort by createdAt (newest first)
       mappedAppointments.sort((a, b) => {
         const dateA = new Date(a.createdAt || 0).getTime();

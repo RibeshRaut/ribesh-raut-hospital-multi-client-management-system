@@ -41,9 +41,9 @@ export async function exampleLogin() {
       localStorage.setItem(
         'user',
         JSON.stringify({
+          ...data.user,
           id: data.user.id,
           userType: data.userType,
-          ...data.user,
         })
       );
 

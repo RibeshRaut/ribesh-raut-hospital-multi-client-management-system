@@ -398,7 +398,7 @@ export const hospitalAPI = {
     });
   },
 
-  update: async (hospitalId: string, data: Record<string, unknown>) => {
+  update: async <T>(hospitalId: string, data: T) => {
     return fetchAPI(`/hospitals/${hospitalId}`, {
       method: 'PUT',
       body: JSON.stringify(data),

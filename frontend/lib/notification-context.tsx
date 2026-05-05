@@ -31,6 +31,14 @@ type ChatsResponse = {
   chats?: Array<{ status?: string }>;
 };
 
+const toRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+const getString = (record: Record<string, unknown>, key: string) => {
+  const value = record[key];
+  return typeof value === "string" ? value : "";
+};
+
 const loadNotifications = (): Notification[] => {
   if (typeof window === "undefined") {
     return [];
@@ -118,12 +126,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     // Listen for new appointment requests
     const unsubscribeAppointmentCreated = on('appointment:created', (data) => {
       console.log('🔔 New appointment received:', data);
+      const record = toRecord(data);
+      const userName = getString(record, "userName") || getString(record, "patientName") || "A patient";
       addNotification({
         type: 'appointment',
         title: 'New Appointment Request',
-        message: `${data.userName || data.patientName || 'A patient'} has requested an appointment`,
+        message: `${userName} has requested an appointment`,
         link: '/dashboard/appointments',
-        data,
+        data: record,
       });
       // Update pending count
       setPendingAppointmentsCount((prev) => prev + 1);
@@ -132,84 +142,96 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     // Listen for appointment status updates
     const unsubscribeAppointmentStatusUpdated = on('appointment:statusUpdated', (data) => {
       console.log('🔔 Appointment status updated:', data);
+      const record = toRecord(data);
+      const status = getString(record, "status") || "updated";
       addNotification({
         type: 'appointment',
         title: 'Appointment Status Updated',
-        message: `Appointment status changed to ${data.status}`,
+        message: `Appointment status changed to ${status}`,
         link: '/dashboard/appointments',
-        data,
+        data: record,
       });
     });
 
     // Listen for appointment cancellations
     const unsubscribeAppointmentCancelled = on('appointment:cancelled', (data) => {
       console.log('🔔 Appointment cancelled:', data);
+      const record = toRecord(data);
       addNotification({
         type: 'appointment',
         title: 'Appointment Cancelled',
         message: `Appointment has been cancelled`,
         link: '/dashboard/appointments',
-        data,
+        data: record,
       });
     });
 
     // Listen for new contact form submissions
     const unsubscribeContactFormSubmitted = on('contactForm:submitted', (data) => {
       console.log('🔔 New contact form received:', data);
+      const record = toRecord(data);
+      const name = getString(record, "name") || "Someone";
+      const subject = getString(record, "subject") || "General Inquiry";
       addNotification({
         type: 'message',
         title: 'New Contact Form',
-        message: `${data.name} submitted a contact form: ${data.subject}`,
+        message: `${name} submitted a contact form: ${subject}`,
         link: '/dashboard/messages',
-        data,
+        data: record,
       });
     });
 
     // Listen for contact form status updates
     const unsubscribeContactFormStatusUpdated = on('contactForm:statusUpdated', (data) => {
       console.log('🔔 Contact form status updated:', data);
+      const record = toRecord(data);
+      const status = getString(record, "status") || "updated";
       addNotification({
         type: 'message',
         title: 'Contact Form Updated',
-        message: `Contact form status changed to ${data.status}`,
+        message: `Contact form status changed to ${status}`,
         link: '/dashboard/messages',
-        data,
+        data: record,
       });
     });
 
     // Listen for payment success
     const unsubscribePaymentSuccess = on('payment:paymentSuccess', (data) => {
       console.log('💳 Payment successful:', data);
+      const record = toRecord(data);
       addNotification({
         type: 'system',
         title: 'Payment Successful',
         message: 'Your appointment payment has been processed',
         link: '/dashboard/appointments',
-        data,
+        data: record,
       });
     });
 
     // Listen for payment failures
     const unsubscribePaymentFailed = on('payment:paymentFailed', (data) => {
       console.log('❌ Payment failed:', data);
+      const record = toRecord(data);
+      const reason = getString(record, "reason") || "Please try again";
       addNotification({
         type: 'system',
         title: 'Payment Failed',
-        message: `Payment failed: ${data.reason || 'Please try again'}`,
+        message: `Payment failed: ${reason}`,
         link: '/dashboard/appointments',
-        data,
+        data: record,
       });
     });
 
     // Listen for payment expiration
     const unsubscribePaymentExpired = on('payment:paymentExpired', (data) => {
       console.log('⏰ Payment expired:', data);
+      const record = toRecord(data);
       addNotification({
         type: 'system',
         title: 'Payment Expired',
         message: 'Your payment session has expired. Please try again.',
         link: '/dashboard/appointments',
-        data,
+        data: record,
       });
     });
 

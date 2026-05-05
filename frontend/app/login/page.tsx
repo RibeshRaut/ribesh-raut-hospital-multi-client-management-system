@@ -80,7 +80,7 @@ export default function LoginPage() {
           id: data.user?.id,
           hospitalId: data.user?.id,
           userType: data.userType,
-          ...data.user,
+          ...(data.user ? { ...data.user, id: data.user.id } : {}),
         };
         console.log("Storing userInfo:", userInfo);
         localStorage.setItem("userInfo", JSON.stringify(userInfo));

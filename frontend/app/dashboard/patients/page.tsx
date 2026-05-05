@@ -57,6 +57,7 @@ type PatientHistoryRecord = {
   _id: string;
   appointmentDate: string;
   doctorId?: { name?: string; specialty?: string };
+  status?: string;
 };
 
 const getErrorMessage = (err: unknown, fallback: string) =>

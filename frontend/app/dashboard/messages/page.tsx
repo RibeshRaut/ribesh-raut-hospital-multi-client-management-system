@@ -63,6 +63,9 @@ export default function MessagesPage() {
   const [hospitalId, setHospitalId] = useState<string>("");
   const { socket, on } = useSocket({ autoConnect: true });
 
+  const getRecord = (value: unknown): Record<string, unknown> =>
+    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("userInfo") || "{}");
     const hId = user?.hospitalId || user?._id || user?.id;
@@ -85,14 +88,15 @@ export default function MessagesPage() {
     // Listen for new contact form submissions
     const unsubscribeSubmitted = on('contactForm:submitted', (data) => {
       console.log('🔔 New contact form received:', data);
-      if (data.hospitalId === hospitalId) {
+      const record = getRecord(data);
+      if (record.hospitalId === hospitalId) {
         // Add the new message to the list
         setMessages((prev) => [
           {
-            ...data,
-            id: data._id,
-            isStarred: data.isStarred || false,
-            subject: data.subject || 'General Inquiry',
+            ...(record as ContactMessageRecord),
+            id: (record._id as string) || "",
+            isStarred: (record.isStarred as boolean) || false,
+            subject: (record.subject as string) || 'General Inquiry',
           },
           ...prev,
         ]);
@@ -102,14 +106,15 @@ export default function MessagesPage() {
     // Listen for contact form status updates
     const unsubscribeStatusUpdated = on('contactForm:statusUpdated', (data) => {
       console.log('🔔 Contact form status updated:', data);
-      if (data.hospitalId === hospitalId) {
+      const record = getRecord(data);
+      if (record.hospitalId === hospitalId) {
         setMessages((prev) =>
           prev.map((msg) =>
-            msg._id === data._id
+            msg._id === record._id
               ? {
                   ...msg,
-                  status: data.status,
-                  isStarred: data.isStarred ?? msg.isStarred,
+                  status: (record.status as string) || msg.status,
+                  isStarred: (record.isStarred as boolean) ?? msg.isStarred,
                 }
               : msg
           )
