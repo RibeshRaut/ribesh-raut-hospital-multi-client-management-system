@@ -13,6 +13,8 @@ export interface UseApiReturn<T> extends UseApiState<T> {
   reset: () => void;
 }
 
+type ApiCallResult<T> = T | { data?: T };
+
 /**
  * Custom hook for handling API calls with loading and error states
  * @param apiCall - The async API call function
@@ -20,7 +22,7 @@ export interface UseApiReturn<T> extends UseApiState<T> {
  * @param onError - Optional callback on error
  */
 export function useApi<T>(
-  apiCall: () => Promise<any>,
+  apiCall: () => Promise<ApiCallResult<T>>,
   onSuccess?: (data: T) => void,
   onError?: (error: APIError) => void
 ): UseApiReturn<T> {
@@ -41,7 +43,7 @@ export function useApi<T>(
 
     try {
       const response = await apiCall();
-      const data = response.data || response;
+      const data = (response as { data?: T }).data ?? (response as T);
 
       setState({
         data,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 interface UseSocketOptions {
@@ -15,9 +15,11 @@ interface UseSocketReturn {
   isConnected: boolean;
   connect: () => void;
   disconnect: () => void;
-  emit: (event: string, ...args: any[]) => void;
-  on: (event: string, callback: (data: any) => void) => () => void;
+  emit: (event: string, ...args: unknown[]) => void;
+  on: (event: string, callback: SocketListener) => () => void;
 }
+
+type SocketListener = (...args: unknown[]) => void;
 
 /**
  * Custom hook for managing WebSocket connections using Socket.IO
@@ -34,82 +36,101 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
     reconnectionAttempts = 5,
   } = options;
 
-  const socketRef = useRef<Socket | null>(null);
-  const isConnectedRef = useRef(false);
-  const listenersRef = useRef<Map<string, Set<Function>>>(new Map());
+  const [socket, setSocket] = useState<Socket | null>(() => {
+    if (!autoConnect) return null;
+    const socketInstance = io(url, {
+      reconnection,
+      reconnectionDelay,
+      reconnectionDelayMax,
+      reconnectionAttempts,
+      transports: ['websocket', 'polling'],
+    });
+    return socketInstance;
+  });
+  const [isConnected, setIsConnected] = useState(false);
 
   // Initialize socket connection
   useEffect(() => {
-    if (!autoConnect) return;
+    if (!autoConnect || !socket) return;
 
-    if (!socketRef.current) {
-      socketRef.current = io(url, {
-        reconnection,
-        reconnectionDelay,
-        reconnectionDelayMax,
-        reconnectionAttempts,
-        transports: ['websocket', 'polling'],
-      });
+    const socketInstance = socket;
 
-      // Connection event listeners
-      socketRef.current.on('connect', () => {
-        isConnectedRef.current = true;
-        console.log('✅ Socket connected:', socketRef.current?.id);
-      });
+    const handleConnect = () => {
+      setIsConnected(true);
+      console.log('✅ Socket connected:', socketInstance.id);
+    };
 
-      socketRef.current.on('disconnect', () => {
-        isConnectedRef.current = false;
-        console.log('❌ Socket disconnected');
-      });
+    const handleDisconnect = () => {
+      setIsConnected(false);
+      console.log('❌ Socket disconnected');
+    };
 
-      socketRef.current.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
-      });
-    }
+    const handleError = (error: unknown) => {
+      console.error('Socket connection error:', error);
+    };
+
+    socketInstance.on('connect', handleConnect);
+    socketInstance.on('disconnect', handleDisconnect);
+    socketInstance.on('connect_error', handleError);
 
     return () => {
-      // Don't disconnect on unmount, keep the connection alive
-      // Only clean up listeners
+      socketInstance.off('connect', handleConnect);
+      socketInstance.off('disconnect', handleDisconnect);
+      socketInstance.off('connect_error', handleError);
     };
-  }, [url, autoConnect, reconnection, reconnectionDelay, reconnectionDelayMax, reconnectionAttempts]);
+  }, [autoConnect, socket]);
 
-  const emit = useCallback((event: string, ...args: any[]) => {
-    if (socketRef.current?.connected) {
-      socketRef.current.emit(event, ...args);
+  const createSocket = useCallback(() => {
+    if (socket) return socket;
+    const socketInstance = io(url, {
+      reconnection,
+      reconnectionDelay,
+      reconnectionDelayMax,
+      reconnectionAttempts,
+      transports: ['websocket', 'polling'],
+    });
+    setSocket(socketInstance);
+    return socketInstance;
+  }, [socket, url, reconnection, reconnectionDelay, reconnectionDelayMax, reconnectionAttempts]);
+
+  const emit = useCallback((event: string, ...args: unknown[]) => {
+    if (socket?.connected) {
+      socket.emit(event, ...args);
     } else {
       console.warn(`Cannot emit event "${event}": socket not connected`);
     }
-  }, []);
+  }, [socket]);
 
-  const on = useCallback((event: string, callback: (data: any) => void) => {
-    if (!socketRef.current) {
+  const on = useCallback((event: string, callback: SocketListener) => {
+    if (!socket) {
       console.warn('Socket not initialized');
       return () => {};
     }
 
-    socketRef.current.on(event, callback);
+    socket.on(event, callback);
 
     // Return unsubscribe function
     return () => {
-      socketRef.current?.off(event, callback);
+      socket.off(event, callback);
     };
-  }, []);
+  }, [socket]);
 
   const connect = useCallback(() => {
-    if (socketRef.current && !socketRef.current.connected) {
-      socketRef.current.connect();
+    const socketInstance = socket || createSocket();
+    if (socketInstance && !socketInstance.connected) {
+      socketInstance.connect();
     }
-  }, []);
+  }, [createSocket, socket]);
 
   const disconnect = useCallback(() => {
-    if (socketRef.current?.connected) {
-      socketRef.current.disconnect();
+    if (socket?.connected) {
+      socket.disconnect();
     }
-  }, []);
+  }, [socket]);
 
   return {
-    socket: socketRef.current,
-    isConnected: isConnectedRef.current,
+    socket,
+    isConnected,
     connect,
     disconnect,
     emit,

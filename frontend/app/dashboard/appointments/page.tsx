@@ -5,7 +5,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -81,7 +81,23 @@ type Doctor = {
   specialty: string;
 };
 
-const appointmentTypes = ["Consultation", "Follow-up", "Check-up", "Emergency"];
+type AppointmentApiRecord = Appointment & {
+  doctorId?: { _id?: string; name?: string } | string;
+  doctorName?: string;
+  userName?: string;
+  userEmail?: string;
+  userPhone?: string;
+  status?: string;
+  paymentStatus?: string;
+  paymentAmount?: number;
+  consultationFee?: number;
+  createdAt?: string;
+  appointmentDate?: string;
+  appointmentTime?: string;
+};
+
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
 
 // Helper to normalize status from backend (lowercase) to frontend (capitalized)
 const normalizeStatus = (status: string): AppointmentStatus => {
@@ -191,7 +207,6 @@ export default function AppointmentsPage() {
       }
 
       const user = JSON.parse(userStr);
-      const userId = user._id || user.id;
       const hospitalId = user.hospitalId || user._id;
 
       if (!hospitalId) {
@@ -202,7 +217,10 @@ export default function AppointmentsPage() {
       // Fetch by hospital
       const response = await appointmentAPI.getByHospital(hospitalId);
       // Map backend field names to frontend field names
-      const mappedAppointments = ((response.data as any[]) || []).map((apt: any) => ({
+      const rawAppointments = Array.isArray(response.data)
+        ? (response.data as AppointmentApiRecord[])
+        : [];
+      const mappedAppointments = rawAppointments.map((apt) => ({
         ...apt,
         patientName: apt.patientName || apt.userName || 'Unknown Patient',
         patientEmail: apt.patientEmail || apt.userEmail || '',
@@ -218,17 +236,15 @@ export default function AppointmentsPage() {
         consultationFee: apt.consultationFee,
       }));
       // Sort by createdAt (newest first)
-      mappedAppointments.sort((a: any, b: any) => {
+      mappedAppointments.sort((a, b) => {
         const dateA = new Date(a.createdAt || 0).getTime();
         const dateB = new Date(b.createdAt || 0).getTime();
         return dateB - dateA;
       });
       setAppointments(mappedAppointments);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching appointments:", err);
-      setError(
-        err.message || "Failed to load appointments. Please try again later."
-      );
+      setError(getErrorMessage(err, "Failed to load appointments. Please try again later."));
       setAppointments([]);
     } finally {
       setIsLoading(false);
@@ -247,7 +263,7 @@ export default function AppointmentsPage() {
 
       const response = await doctorAPI.getByHospital(hospitalId);
       setDoctors((response.data as Doctor[]) || []);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error fetching doctors:", err);
     }
   };
@@ -351,10 +367,10 @@ export default function AppointmentsPage() {
         reason: "",
         notes: "",
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error creating appointment:", err);
       setMutationError(
-        err.message || "Failed to create appointment. Please try again."
+        getErrorMessage(err, "Failed to create appointment. Please try again.")
       );
     } finally {
       setIsMutating(false);
@@ -368,7 +384,7 @@ export default function AppointmentsPage() {
 
       const appointmentIdToUse = appointmentId;
       const response = await appointmentAPI.updateStatus(appointmentIdToUse, newStatus);
-      const updated = (response.data as any) || {};
+      const updated = (response.data as AppointmentApiRecord) || {};
 
       const updatedFields = {
         status: normalizeStatus(updated.status || newStatus),
@@ -391,10 +407,10 @@ export default function AppointmentsPage() {
       if (selectedAppointment && (selectedAppointment._id || selectedAppointment.id) === appointmentIdToUse) {
         setSelectedAppointment({ ...selectedAppointment, ...updatedFields });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error updating status:", err);
       setMutationError(
-        err.message || "Failed to update status. Please try again."
+        getErrorMessage(err, "Failed to update status. Please try again.")
       );
     } finally {
       setIsMutating(false);
@@ -407,7 +423,7 @@ export default function AppointmentsPage() {
       setMutationError(null);
 
       const response = await appointmentAPI.markFullyPaid(appointmentId);
-      const updated = (response.data as any) || {};
+      const updated = (response.data as AppointmentApiRecord) || {};
 
       const updatedFields = {
         paymentStatus: updated.paymentStatus || 'paid',
@@ -427,10 +443,10 @@ export default function AppointmentsPage() {
       if (selectedAppointment && (selectedAppointment._id || selectedAppointment.id) === appointmentId) {
         setSelectedAppointment({ ...selectedAppointment, ...updatedFields });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error marking appointment as fully paid:", err);
       setMutationError(
-        err.message || "Failed to mark appointment as fully paid. Please try again."
+        getErrorMessage(err, "Failed to mark appointment as fully paid. Please try again.")
       );
     } finally {
       setIsMutating(false);
@@ -442,10 +458,10 @@ export default function AppointmentsPage() {
       setIsMutating(true);
       setMutationError(null);
       await paymentAPI.sendRemainingPaymentLink(appointmentId);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error sending payment link:", err);
       setMutationError(
-        err.message || "Failed to send payment link. Please try again."
+        getErrorMessage(err, "Failed to send payment link. Please try again.")
       );
     } finally {
       setIsMutating(false);

@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   CheckCircle2,
   AlertCircle,
@@ -25,7 +24,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { hospitalAPI, APIError } from "@/lib/api";
-import { validatePhone, validateEmail, validateName } from "@/lib/validation";
+import { validatePhone, validateEmail } from "@/lib/validation";
 
 interface HospitalData {
   name: string;
@@ -37,6 +36,8 @@ interface HospitalData {
   emergencyDepartment?: boolean;
   description?: string;
 }
+
+type HospitalProfileResponse = Partial<HospitalData>;
 
 interface OnboardingStep {
   id: number;
@@ -96,9 +97,10 @@ export default function HospitalOnboarding() {
           try {
             const response = await hospitalAPI.getProfile();
             if (response.data) {
+              const data = response.data as HospitalProfileResponse;
               setFormData((prev) => ({
                 ...prev,
-                ...(response.data as any),
+                ...data,
               }));
             }
           } catch (error) {
@@ -218,7 +220,7 @@ export default function HospitalOnboarding() {
 
     try {
       const user = JSON.parse(localStorage.getItem("userInfo") || "{}");
-      const response = await hospitalAPI.update(user.id, formData);
+      await hospitalAPI.update(user.id, formData);
 
       setSuccessMessage("Hospital profile updated successfully!");
       setTimeout(() => {

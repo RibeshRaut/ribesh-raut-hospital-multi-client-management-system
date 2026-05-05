@@ -108,7 +108,16 @@ export const validateTime = (time: string): string[] => {
 };
 
 // Validate appointment form
-export const validateAppointmentForm = (data: any): Record<string, string[]> => {
+type AppointmentFormInput = Partial<{
+  patientName: string;
+  patientEmail: string;
+  patientPhone: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  reason: string;
+}>;
+
+export const validateAppointmentForm = (data: AppointmentFormInput): Record<string, string[]> => {
   const errors: Record<string, string[]> = {};
 
   // Patient name validation
@@ -146,7 +155,12 @@ export const validateAppointmentForm = (data: any): Record<string, string[]> => 
 };
 
 // Validate login form
-export const validateLoginForm = (data: any): Record<string, string[]> => {
+type LoginFormInput = Partial<{
+  email: string;
+  password: string;
+}>;
+
+export const validateLoginForm = (data: LoginFormInput): Record<string, string[]> => {
   const errors: Record<string, string[]> = {};
 
   if (!data.email || !validateEmail(data.email)) {
@@ -161,7 +175,15 @@ export const validateLoginForm = (data: any): Record<string, string[]> => {
 };
 
 // Validate contact form
-export const validateContactForm = (data: any): Record<string, string[]> => {
+type ContactFormInput = Partial<{
+  name: string;
+  email: string;
+  phone: string;
+  subject: string;
+  message: string;
+}>;
+
+export const validateContactForm = (data: ContactFormInput): Record<string, string[]> => {
   const errors: Record<string, string[]> = {};
 
   const nameErrors = validateName(data.name || '');

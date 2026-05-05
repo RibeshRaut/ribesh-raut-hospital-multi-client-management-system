@@ -51,6 +51,33 @@ interface Patient {
   locations: string[];
 }
 
+type HospitalSummary = {
+  _id?: string;
+  name?: string;
+  address?: string;
+};
+
+type HospitalsResponse = {
+  hospitals?: HospitalSummary[];
+};
+
+type AppointmentSummary = {
+  patientEmail?: string;
+  patientName?: string;
+  patientPhone?: string;
+  hospitalId?: string;
+  hospitalName?: string;
+  appointmentDate?: string;
+};
+
+type AppointmentsResponse = {
+  appointments?: AppointmentSummary[];
+  pagination?: { totalPages?: number };
+};
+
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
+
 const ITEMS_PER_PAGE = 10;
 
 const getLocationFromAddress = (address: string) => {
@@ -110,16 +137,16 @@ export default function AllPatientsPage() {
       setError(null);
 
       const hospitalsResponse = await superAdminAPI.getAllHospitals({ page: 1, limit: 1000 });
-      const hospitalsData = (hospitalsResponse.data as any)?.hospitals || [];
+      const hospitalsData = (hospitalsResponse.data as HospitalsResponse | undefined)?.hospitals || [];
       const hospitalMap = new Map<string, { name: string; address: string }>();
-      hospitalsData.forEach((hospital: any) => {
-        hospitalMap.set(String(hospital._id), {
+      hospitalsData.forEach((hospital) => {
+        hospitalMap.set(String(hospital._id || ""), {
           name: hospital.name || "Unknown Hospital",
           address: hospital.address || "",
         });
       });
 
-      const allAppointments: any[] = [];
+      const allAppointments: AppointmentSummary[] = [];
       let page = 1;
       let totalPages = 1;
 
@@ -129,7 +156,7 @@ export default function AllPatientsPage() {
           limit: 500,
         });
 
-        const data = response.data as any;
+        const data = response.data as AppointmentsResponse | undefined;
         const pageAppointments = data?.appointments || [];
         allAppointments.push(...pageAppointments);
         totalPages = data?.pagination?.totalPages || 1;
@@ -138,7 +165,7 @@ export default function AllPatientsPage() {
 
       const patientMap = new Map<string, Patient>();
 
-      allAppointments.forEach((apt: any) => {
+      allAppointments.forEach((apt) => {
         const email = apt.patientEmail || "";
         const key = email || `${apt.patientName || "Unknown"}-${apt.patientPhone || ""}`;
         const hospitalId = String(apt.hospitalId || "");
@@ -150,11 +177,11 @@ export default function AllPatientsPage() {
         if (existing) {
           existing.appointmentCount += 1;
 
-          if (new Date(apt.appointmentDate) > new Date(existing.lastAppointment)) {
+          if (apt.appointmentDate && new Date(apt.appointmentDate) > new Date(existing.lastAppointment)) {
             existing.lastAppointment = apt.appointmentDate;
           }
 
-          if (new Date(apt.appointmentDate) < new Date(existing.firstAppointment)) {
+          if (apt.appointmentDate && new Date(apt.appointmentDate) < new Date(existing.firstAppointment)) {
             existing.firstAppointment = apt.appointmentDate;
           }
 
@@ -175,8 +202,8 @@ export default function AllPatientsPage() {
             name: apt.patientName || "N/A",
             phone: apt.patientPhone || "N/A",
             appointmentCount: 1,
-            lastAppointment: apt.appointmentDate,
-            firstAppointment: apt.appointmentDate,
+            lastAppointment: apt.appointmentDate || "",
+            firstAppointment: apt.appointmentDate || "",
             hospitals: [hospitalName],
             hospitalIds: hospitalId ? [hospitalId] : [],
             locations: [location],
@@ -185,9 +212,9 @@ export default function AllPatientsPage() {
       });
 
       setPatients(Array.from(patientMap.values()));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching patients:", err);
-      setError(err.message || "Failed to load patients");
+      setError(getErrorMessage(err, "Failed to load patients"));
     } finally {
       setIsLoading(false);
     }

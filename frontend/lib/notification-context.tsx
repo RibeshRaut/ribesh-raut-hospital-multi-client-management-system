@@ -12,8 +12,57 @@ export interface Notification {
   timestamp: Date;
   read: boolean;
   link?: string;
-  data?: any;
+  data?: unknown;
 }
+
+type StoredNotification = Omit<Notification, "timestamp"> & { timestamp: string };
+
+type AppointmentLike = {
+  status?: string;
+  createdAt?: string;
+  userName?: string;
+  patientName?: string;
+  patientEmail?: string;
+  patientPhone?: string;
+};
+
+type ChatsResponse = {
+  success?: boolean;
+  chats?: Array<{ status?: string }>;
+};
+
+const loadNotifications = (): Notification[] => {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const saved = localStorage.getItem("notifications");
+  if (!saved) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(saved) as StoredNotification[];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.map((n) => ({
+      ...n,
+      timestamp: new Date(n.timestamp),
+    }));
+  } catch {
+    return [];
+  }
+};
+
+const loadLastCheckedAt = (): Date => {
+  if (typeof window === "undefined") {
+    return new Date();
+  }
+
+  const lastChecked = localStorage.getItem("lastNotificationCheck");
+  return lastChecked ? new Date(lastChecked) : new Date();
+};
 
 interface NotificationContextType {
   notifications: Notification[];
@@ -30,8 +79,8 @@ interface NotificationContextType {
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [lastCheckedAt, setLastCheckedAt] = useState<Date>(new Date());
+  const [notifications, setNotifications] = useState<Notification[]>(loadNotifications);
+  const [lastCheckedAt, setLastCheckedAt] = useState<Date>(loadLastCheckedAt);
   const [pendingAppointmentsCount, setPendingAppointmentsCount] = useState(0);
   const [waitingChatsCount, setWaitingChatsCount] = useState(0);
   const { socket, on } = useSocket({ autoConnect: true });
@@ -183,26 +232,29 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       const token = tokenManager.getToken();
       if (!userStr) return;
 
-      const user = JSON.parse(userStr);
+      const user = JSON.parse(userStr) as { hospitalId?: string; _id?: string };
       const hospitalId = user.hospitalId || user._id;
       if (!hospitalId) return;
 
       // Fetch recent appointments
       const response = await appointmentAPI.getByHospital(hospitalId);
-      const appointments = (response.data || []) as any[];
+      const appointments = Array.isArray(response.data)
+        ? (response.data as AppointmentLike[])
+        : [];
 
       // Count pending appointments
-      const pendingCount = appointments.filter((apt: any) => apt.status === "pending").length;
+      const pendingCount = appointments.filter((apt) => apt.status === "pending").length;
       setPendingAppointmentsCount(pendingCount);
 
       // Find appointments created after last check
-      const newAppointments = appointments.filter((apt: any) => {
+      const newAppointments = appointments.filter((apt) => {
+        if (!apt.createdAt) return false;
         const createdAt = new Date(apt.createdAt);
         return createdAt > lastCheckedAt;
       });
 
       // Add notifications for new appointments
-      newAppointments.forEach((apt: any) => {
+      newAppointments.forEach((apt) => {
         addNotification({
           type: "appointment",
           title: "New Appointment Request",
@@ -223,10 +275,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
               },
             }
           );
-          const chatsData = await chatsResponse.json();
-          
+          const chatsData = (await chatsResponse.json()) as ChatsResponse;
+
           if (chatsData.success) {
-            const waitingCount = chatsData.chats.filter((c: any) => c.status === "waiting").length;
+            const waitingCount = (chatsData.chats || []).filter(
+              (c) => c.status === "waiting"
+            ).length;
             setWaitingChatsCount(waitingCount);
           }
         } catch (error) {
@@ -248,26 +302,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     return () => clearInterval(interval);
   }, [refreshNotifications]);
-
-  // Initial load
-  useEffect(() => {
-    // Load notifications from localStorage if available
-    const saved = localStorage.getItem("notifications");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setNotifications(parsed.map((n: any) => ({ ...n, timestamp: new Date(n.timestamp) })));
-      } catch (e) {
-        console.error("Error loading notifications:", e);
-      }
-    }
-
-    // Load last checked time
-    const lastChecked = localStorage.getItem("lastNotificationCheck");
-    if (lastChecked) {
-      setLastCheckedAt(new Date(lastChecked));
-    }
-  }, []);
 
   // Save notifications to localStorage
   useEffect(() => {

@@ -29,7 +29,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { contactFormAPI, APIError } from "@/lib/api";
+import { contactFormAPI } from "@/lib/api";
 import { useSocket } from "@/lib/useSocket";
 
 type Message = {
@@ -45,6 +45,11 @@ type Message = {
   isStarred: boolean;
   image?: string;
 };
+
+type ContactMessageRecord = Omit<Message, "id"> & { id?: string };
+
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
 
 type FilterType = "all" | "unread" | "starred";
 
@@ -123,16 +128,19 @@ export default function MessagesPage() {
       setIsLoading(true);
       setError(null);
       const response = await contactFormAPI.getByHospital(hId);
-      const fetchedMessages = ((response.data as any[]) || []).map((msg: any) => ({
+      const rawMessages = Array.isArray(response.data)
+        ? (response.data as ContactMessageRecord[])
+        : [];
+      const fetchedMessages = rawMessages.map((msg) => ({
         ...msg,
         id: msg._id,
         isStarred: msg.isStarred || false,
         subject: msg.subject || "General Inquiry",
       }));
       setMessages(fetchedMessages);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching messages:", err);
-      setError(err.message || "Failed to load messages");
+      setError(getErrorMessage(err, "Failed to load messages"));
     } finally {
       setIsLoading(false);
     }

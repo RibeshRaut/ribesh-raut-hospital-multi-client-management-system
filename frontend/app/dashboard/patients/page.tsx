@@ -53,13 +53,22 @@ type Patient = {
   status: "Active" | "Inactive";
 };
 
+type PatientHistoryRecord = {
+  _id: string;
+  appointmentDate: string;
+  doctorId?: { name?: string; specialty?: string };
+};
+
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
+
 export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [patientHistory, setPatientHistory] = useState<any[]>([]);
+  const [patientHistory, setPatientHistory] = useState<PatientHistoryRecord[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   useEffect(() => {
@@ -80,9 +89,9 @@ export default function PatientsPage() {
 
       const response = await patientAPI.getByHospital(hospitalId);
       setPatients((response.data as Patient[]) || []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching patients:", err);
-      setError(err.message || "Failed to load patients");
+      setError(getErrorMessage(err, "Failed to load patients"));
     } finally {
       setIsLoading(false);
     }
@@ -104,9 +113,12 @@ export default function PatientsPage() {
       
       if (hospitalId && patient.email) {
         const response = await patientAPI.getHistory(hospitalId, patient.email);
-        setPatientHistory((response.data as any[]) || []);
+        const history = Array.isArray(response.data)
+          ? (response.data as PatientHistoryRecord[])
+          : [];
+        setPatientHistory(history);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error fetching patient history:", err);
     } finally {
       setIsLoadingHistory(false);
@@ -507,7 +519,7 @@ export default function PatientsPage() {
                   <div className="space-y-2">
                     <h4 className="font-medium">Recent Appointments</h4>
                     <div className="max-h-48 overflow-y-auto space-y-2">
-                      {patientHistory.slice(0, 5).map((apt: any) => (
+                      {patientHistory.slice(0, 5).map((apt) => (
                         <div
                           key={apt._id}
                           className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"

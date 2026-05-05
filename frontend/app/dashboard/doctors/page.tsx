@@ -12,7 +12,6 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -45,7 +44,7 @@ import {
   Upload,
   Camera,
 } from "lucide-react";
-import { doctorAPI, tokenManager } from "@/lib/api";
+import { doctorAPI } from "@/lib/api";
 import { validateEmail, validatePhone } from "@/lib/validation";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -67,6 +66,9 @@ type Doctor = {
   joinDate?: string;
   createdAt?: string;
 };
+
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
 
 const defaultSpecialties = [
   "Cardiology",
@@ -148,9 +150,9 @@ export default function DoctorsPage() {
       const apiSpecialties = (specialtiesResponse.data as string[]) || [];
       const mergedSpecialties = [...new Set([...defaultSpecialties, ...apiSpecialties])].sort();
       setSpecialties(mergedSpecialties);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching data:", err);
-      setError(err.message || "Failed to load doctors. Please try again later.");
+      setError(getErrorMessage(err, "Failed to load doctors. Please try again later."));
       setDoctors([]);
     } finally {
       setIsLoading(false);
@@ -171,7 +173,7 @@ export default function DoctorsPage() {
       const apiSpecialties = (response.data as string[]) || [];
       const mergedSpecialties = [...new Set([...defaultSpecialties, ...apiSpecialties])].sort();
       setSpecialties(mergedSpecialties);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error refreshing specialties:", err);
     }
   };
@@ -308,7 +310,7 @@ export default function DoctorsPage() {
           try {
             const photoResponse = await doctorAPI.uploadPhoto(docId, selectedPhoto);
             savedDoctor = photoResponse.data as Doctor;
-          } catch (photoErr: any) {
+          } catch (photoErr: unknown) {
             console.error("Photo upload failed:", photoErr);
             // Continue even if photo upload fails
           }
@@ -339,7 +341,7 @@ export default function DoctorsPage() {
           try {
             const photoResponse = await doctorAPI.uploadPhoto(newDocId, selectedPhoto);
             savedDoctor = photoResponse.data as Doctor;
-          } catch (photoErr: any) {
+          } catch (photoErr: unknown) {
             console.error("Photo upload failed:", photoErr);
           }
           setIsUploadingPhoto(false);
@@ -368,10 +370,10 @@ export default function DoctorsPage() {
       
       // Refresh specialties list to include newly added specialty
       refreshSpecialties();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error saving doctor:", err);
       setMutationError(
-        err.message || "Failed to save doctor. Please try again."
+        getErrorMessage(err, "Failed to save doctor. Please try again.")
       );
     } finally {
       setIsMutating(false);
@@ -394,10 +396,10 @@ export default function DoctorsPage() {
       );
       setIsDeleteDialogOpen(false);
       setDeletingDoctor(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error deleting doctor:", err);
       setMutationError(
-        err.message || "Failed to delete doctor. Please try again."
+        getErrorMessage(err, "Failed to delete doctor. Please try again.")
       );
     } finally {
       setIsMutating(false);

@@ -67,6 +67,14 @@ interface Pagination {
   totalPages: number;
 }
 
+type WebsiteMessagesResponse = {
+  contactForms?: WebsiteContactForm[];
+  pagination?: Pagination;
+};
+
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
+
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3002";
 
 export default function WebsiteMessagesPage() {
@@ -133,13 +141,13 @@ export default function WebsiteMessagesPage() {
       });
 
       if (response.data) {
-        const data = response.data as any;
+        const data = response.data as WebsiteMessagesResponse;
         setMessages(data.contactForms || []);
         setPagination(data.pagination || pagination);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching messages:", err);
-      setError(err.message || "Failed to load messages");
+      setError(getErrorMessage(err, "Failed to load messages"));
     } finally {
       setIsLoading(false);
     }

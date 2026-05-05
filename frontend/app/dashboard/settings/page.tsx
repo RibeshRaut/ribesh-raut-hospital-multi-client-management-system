@@ -68,6 +68,14 @@ interface HospitalData {
   images?: string[];
 }
 
+type HospitalResponseData = HospitalData & {
+  socialLinks?: SocialLinks;
+};
+
+type HospitalImagesResponse = {
+  images?: string[];
+};
+
 export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -114,12 +122,13 @@ export default function SettingsPage() {
           try {
             const response = await hospitalAPI.getById(user.id);
             if (response.data) {
+              const data = response.data as HospitalResponseData;
               setHospitalData((prev) => ({
                 ...prev,
-                ...(response.data as any),
+                ...data,
                 socialLinks: {
                   ...prev.socialLinks,
-                  ...(response.data as any).socialLinks,
+                  ...data.socialLinks,
                 },
               }));
             }
@@ -243,10 +252,11 @@ export default function SettingsPage() {
 
     try {
       const response = await hospitalAPI.deleteImage(hospitalId, imageUrl);
-      if ((response.data as any)?.images) {
+      const data = response.data as HospitalImagesResponse | undefined;
+      if (data?.images) {
         setHospitalData((prev) => ({
           ...prev,
-          images: (response.data as any).images,
+          images: data.images,
         }));
         setSuccessMessage("Image deleted successfully!");
         setTimeout(() => setSuccessMessage(""), 3000);

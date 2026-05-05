@@ -62,6 +62,14 @@ interface Pagination {
   totalPages: number;
 }
 
+type AppointmentsResponse = {
+  appointments?: Appointment[];
+  pagination?: Pagination;
+};
+
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
+
 export default function AllAppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
@@ -128,13 +136,13 @@ export default function AllAppointmentsPage() {
       });
 
       if (response.data) {
-        const data = response.data as any;
+        const data = response.data as AppointmentsResponse;
         setAppointments(data.appointments || []);
         setPagination(data.pagination || pagination);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching appointments:", err);
-      setError(err.message || "Failed to load appointments");
+      setError(getErrorMessage(err, "Failed to load appointments"));
     } finally {
       setIsLoading(false);
     }

@@ -14,6 +14,7 @@ import {
   tokenManager,
   APIError,
 } from '@/lib/api';
+import { Appointment, Doctor, LoginResponse } from '@/lib/types';
 
 import {
   validateLoginForm,
@@ -32,22 +33,23 @@ export async function exampleLogin() {
     const response = await authAPI.login('admin@hospital.com', 'Password123!');
 
     if (response.data) {
+      const data = response.data as LoginResponse;
       // Store token
-      tokenManager.setToken((response.data as any).token);
+      tokenManager.setToken(data.token);
 
       // Store user info
       localStorage.setItem(
         'user',
         JSON.stringify({
-          id: (response.data as any).user.id,
-          userType: (response.data as any).userType,
-          ...(response.data as any).user,
+          id: data.user.id,
+          userType: data.userType,
+          ...data.user,
         })
       );
 
       console.log('✓ Login successful');
-      console.log('Token:', (response.data as any).token);
-      console.log('User:', (response.data as any).user);
+      console.log('Token:', data.token);
+      console.log('User:', data.user);
     }
   } catch (error) {
     if (error instanceof APIError) {
@@ -74,7 +76,10 @@ export async function exampleRegister() {
     });
 
     if (response.data) {
-      tokenManager.setToken((response.data as any).token);
+      const data = response.data as { token?: string };
+      if (data.token) {
+        tokenManager.setToken(data.token);
+      }
       console.log('✓ Registration successful');
     }
   } catch (error) {
@@ -99,8 +104,9 @@ export async function exampleCreateDoctor() {
     });
 
     if (response.data) {
+      const data = response.data as { doctor?: Doctor };
       console.log('✓ Doctor created successfully');
-      console.log('Doctor:', (response.data as any).doctor);
+      console.log('Doctor:', data.doctor);
     }
   } catch (error) {
     if (error instanceof APIError) {
@@ -118,9 +124,10 @@ export async function exampleGetDoctors(hospitalId: string) {
     const response = await doctorAPI.getByHospital(hospitalId);
 
     if (response.data) {
+      const doctors = response.data as Doctor[];
       console.log('✓ Doctors retrieved successfully');
-      console.log('Count:', (response.data as any[]).length);
-      console.log('Doctors:', response.data);
+      console.log('Count:', doctors.length);
+      console.log('Doctors:', doctors);
     }
   } catch (error) {
     if (error instanceof APIError) {
@@ -156,8 +163,9 @@ export async function exampleCreateAppointment() {
     const response = await appointmentAPI.create(appointmentData);
 
     if (response.data) {
+      const appointment = response.data as Appointment;
       console.log('✓ Appointment created successfully');
-      console.log('Appointment:', (response.data as any));
+      console.log('Appointment:', appointment);
     }
   } catch (error) {
     if (error instanceof APIError) {
@@ -175,9 +183,10 @@ export async function exampleGetUserAppointments(userId: string) {
     const response = await appointmentAPI.getByUser(userId);
 
     if (response.data) {
+      const appointments = response.data as Appointment[];
       console.log('✓ User appointments retrieved successfully');
-      console.log('Count:', (response.data as any[]).length);
-      console.log('Appointments:', response.data);
+      console.log('Count:', appointments.length);
+      console.log('Appointments:', appointments);
     }
   } catch (error) {
     if (error instanceof APIError) {
@@ -203,8 +212,9 @@ export async function exampleUpdateAppointmentStatus(
     const response = await appointmentAPI.updateStatus(appointmentId, newStatus);
 
     if (response.data) {
+      const appointment = response.data as Appointment;
       console.log('✓ Appointment status updated successfully');
-      console.log('Updated Appointment:', (response.data as any));
+      console.log('Updated Appointment:', appointment);
     }
   } catch (error) {
     if (error instanceof APIError) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ComponentType, type SVGProps } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -139,6 +139,9 @@ interface SubscriptionInfo {
   subscriptionEndDate?: string | null;
 }
 
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
+
 export default function HospitalPublicPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -271,8 +274,8 @@ export default function HospitalPublicPage() {
           }
         }
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to load hospital");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Failed to load hospital"));
     } finally {
       setIsLoading(false);
     }
@@ -351,12 +354,18 @@ export default function HospitalPublicPage() {
         const day = String(date.getDate()).padStart(2, "0");
         const dateStr = `${year}-${month}-${day}`;
         const response = await appointmentAPI.getAvailableSlots(bookingDoctor._id, dateStr);
-        const rawSlots = response.data as any[];
+        const rawSlots = Array.isArray(response.data) ? response.data : [];
         const slots =
-          rawSlots && rawSlots.length > 0
-            ? rawSlots.map((slot: any) => {
+          rawSlots.length > 0
+            ? rawSlots.map((slot) => {
                 if (typeof slot === "string") return slot;
-                const timeValue = slot.label || slot.time;
+                const record = slot && typeof slot === "object" ? (slot as Record<string, unknown>) : {};
+                const timeValue =
+                  typeof record.label === "string"
+                    ? record.label
+                    : typeof record.time === "string"
+                    ? record.time
+                    : "";
                 if (timeValue && timeValue.includes("T")) {
                   const d = new Date(timeValue);
                   return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
@@ -365,7 +374,7 @@ export default function HospitalPublicPage() {
               })
             : generateTimeSlots(bookingSchedule);
         setAvailableSlots(slots);
-      } catch (err) {
+      } catch (err: unknown) {
         setAvailableSlots(generateTimeSlots(bookingSchedule));
       } finally {
         setIsLoadingSlots(false);
@@ -413,9 +422,9 @@ export default function HospitalPublicPage() {
       } else {
         throw new Error('Failed to create payment session');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setRedirectingToPayment(false);
-      setBookingError(err.message || "Failed to book appointment");
+      setBookingError(getErrorMessage(err, "Failed to book appointment"));
     } finally {
       setIsBooking(false);
     }
@@ -434,14 +443,14 @@ export default function HospitalPublicPage() {
       });
       setSubmitSuccess(true);
       setContactForm({ name: "", email: "", phone: "", subject: "", message: "" });
-    } catch (err: any) {
-      setSubmitError(err.message || "Failed to submit");
+    } catch (err: unknown) {
+      setSubmitError(getErrorMessage(err, "Failed to submit"));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const socialIcons: Record<string, any> = {
+  const socialIcons: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
     facebook: Facebook,
     twitter: Twitter,
     instagram: Instagram,
@@ -474,7 +483,7 @@ export default function HospitalPublicPage() {
               <AlertCircle className="h-10 w-10 text-destructive" />
             </div>
             <h2 className="text-2xl font-bold mb-3">Hospital Not Found</h2>
-            <p className="text-muted-foreground mb-6">{error || "The hospital you're looking for doesn't exist."}</p>
+            <p className="text-muted-foreground mb-6">{error || "The hospital you&apos;re looking for doesn&apos;t exist."}</p>
             <Button asChild size="lg">
               <Link href="/hospitals">Browse Hospitals</Link>
             </Button>
@@ -1113,7 +1122,7 @@ export default function HospitalPublicPage() {
                     <CheckCircle className="h-8 w-8 text-emerald-600" />
                   </div>
                   <h3 className="text-xl font-bold mb-2">Booking Confirmed!</h3>
-                  <p className="text-muted-foreground">We'll send you a confirmation email shortly.</p>
+                  <p className="text-muted-foreground">We&apos;ll send you a confirmation email shortly.</p>
                 </div>
               ) : (
                 <form onSubmit={handleBookingSubmit} className="space-y-6">
@@ -1193,7 +1202,7 @@ export default function HospitalPublicPage() {
                               </div>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              You'll be redirected to a secure payment page to complete the advance payment.
+                              You&apos;ll be redirected to a secure payment page to complete the advance payment.
                             </p>
                           </div>
                         </>

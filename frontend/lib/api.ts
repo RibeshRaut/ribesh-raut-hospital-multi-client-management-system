@@ -1,4 +1,10 @@
-import { ApiError, ApiResponse } from './types';
+import {
+  ApiError,
+  ApiResponse,
+  ContactFormRequest,
+  CreateAppointmentRequest,
+  CreateDoctorRequest,
+} from './types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
 
@@ -183,7 +189,7 @@ export const authAPI = {
 
 // Doctor API calls
 export const doctorAPI = {
-  create: async (doctorData: any) => {
+  create: async (doctorData: CreateDoctorRequest) => {
     return fetchAPI('/doctors', {
       method: 'POST',
       body: JSON.stringify(doctorData),
@@ -202,7 +208,7 @@ export const doctorAPI = {
     });
   },
 
-  update: async (doctorId: string, doctorData: any) => {
+  update: async (doctorId: string, doctorData: Partial<CreateDoctorRequest>) => {
     return fetchAPI(`/doctors/${doctorId}`, {
       method: 'PUT',
       body: JSON.stringify(doctorData),
@@ -249,7 +255,7 @@ export const doctorAPI = {
 
 // Appointment API calls
 export const appointmentAPI = {
-  create: async (appointmentData: any) => {
+  create: async (appointmentData: CreateAppointmentRequest) => {
     return fetchAPI('/appointments/request', {
       method: 'POST',
       body: JSON.stringify(appointmentData),
@@ -325,7 +331,7 @@ export const patientAPI = {
 
 // Contact Form API calls
 export const contactFormAPI = {
-  submit: async (formData: any) => {
+  submit: async (formData: ContactFormRequest) => {
     return fetchAPI('/contact-forms', {
       method: 'POST',
       body: JSON.stringify(formData),
@@ -392,7 +398,7 @@ export const hospitalAPI = {
     });
   },
 
-  update: async (hospitalId: string, data: any) => {
+  update: async (hospitalId: string, data: Record<string, unknown>) => {
     return fetchAPI(`/hospitals/${hospitalId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -488,7 +494,7 @@ export const dashboardAPI = {
 
 // Service API calls
 export const serviceAPI = {
-  create: async (serviceData: any) => {
+  create: async (serviceData: Record<string, unknown>) => {
     return fetchAPI('/services', {
       method: 'POST',
       body: JSON.stringify(serviceData),
@@ -507,7 +513,7 @@ export const serviceAPI = {
     });
   },
 
-  update: async (serviceId: string, serviceData: any) => {
+  update: async (serviceId: string, serviceData: Record<string, unknown>) => {
     return fetchAPI(`/services/${serviceId}`, {
       method: 'PUT',
       body: JSON.stringify(serviceData),
@@ -529,7 +535,7 @@ export const serviceAPI = {
 
 // Schedule API calls
 export const scheduleAPI = {
-  create: async (scheduleData: any) => {
+  create: async (scheduleData: Record<string, unknown>) => {
     return fetchAPI('/schedules', {
       method: 'POST',
       body: JSON.stringify(scheduleData),
@@ -561,7 +567,7 @@ export const scheduleAPI = {
     });
   },
 
-  update: async (scheduleId: string, scheduleData: any) => {
+  update: async (scheduleId: string, scheduleData: Record<string, unknown>) => {
     return fetchAPI(`/schedules/${scheduleId}`, {
       method: 'PUT',
       body: JSON.stringify(scheduleData),
@@ -847,9 +853,12 @@ export const adminAPI = {
       return await fetchAPI('/super-admin/profile', {
         method: 'GET',
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // During maintenance mode or auth errors, return empty profile
-      if (error?.status === 503 || error?.status === 401) {
+      const status = typeof error === 'object' && error !== null && 'status' in error
+        ? (error as { status?: number }).status
+        : undefined;
+      if (status === 503 || status === 401) {
         console.warn("Could not fetch admin profile (possibly in maintenance mode)");
         return {
           data: {
@@ -969,7 +978,7 @@ export const getPlatformSettings = async () => {
   }
 };
 
-export const updatePlatformSettings = async (settings: any) => {
+export const updatePlatformSettings = async (settings: Record<string, unknown>) => {
   const response = await fetchAPI('/platform', {
     method: "PUT",
     skipAuth: false,

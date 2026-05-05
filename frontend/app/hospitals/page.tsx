@@ -37,6 +37,9 @@ interface Hospital {
   emergencyDepartment?: boolean;
 }
 
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
+
 export default function HospitalsPage() {
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [filteredHospitals, setFilteredHospitals] = useState<Hospital[]>([]);
@@ -71,8 +74,8 @@ export default function HospitalsPage() {
       const data = (response.data as Hospital[]) || [];
       setHospitals(data);
       setFilteredHospitals(data);
-    } catch (err: any) {
-      setError(err.message || "Failed to load hospitals");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Failed to load hospitals"));
     } finally {
       setIsLoading(false);
     }

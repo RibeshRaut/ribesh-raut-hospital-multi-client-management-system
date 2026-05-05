@@ -20,6 +20,7 @@ import {
   User,
 } from "lucide-react";
 import { authAPI, tokenManager, APIError } from "@/lib/api";
+import { LoginResponse } from "@/lib/types";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -70,15 +71,16 @@ export default function LoginPage() {
       const response = await authAPI.login(formData.identifier, formData.password);
       console.log("Login response:", response);
 
-      if (response.data && (response.data as any).token) {
+      if (response.data && (response.data as LoginResponse).token) {
+        const data = response.data as LoginResponse;
         // Store token and user info
-        tokenManager.setToken((response.data as any).token);
+        tokenManager.setToken(data.token);
         
         const userInfo = {
-          id: (response.data as any).user?.id,
-          hospitalId: (response.data as any).user?.hospitalId || (response.data as any).user?.id,
-          userType: (response.data as any).userType,
-          ...(response.data as any).user,
+          id: data.user?.id,
+          hospitalId: data.user?.id,
+          userType: data.userType,
+          ...data.user,
         };
         console.log("Storing userInfo:", userInfo);
         localStorage.setItem("userInfo", JSON.stringify(userInfo));
@@ -86,8 +88,8 @@ export default function LoginPage() {
         document.cookie = `userInfo=${encodeURIComponent(JSON.stringify(userInfo))}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
 
         // Redirect based on user type
-        console.log("Redirecting based on user type:", (response.data as any).userType);
-        if ((response.data as any).userType === "website_admin") {
+        console.log("Redirecting based on user type:", data.userType);
+        if (data.userType === "website_admin") {
           router.push("/super-admin");
         } else {
           router.push("/dashboard");

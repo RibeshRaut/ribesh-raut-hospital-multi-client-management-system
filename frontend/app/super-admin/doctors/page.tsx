@@ -58,6 +58,14 @@ interface Pagination {
   totalPages: number;
 }
 
+type DoctorsResponse = {
+  doctors?: Doctor[];
+  pagination?: Pagination;
+};
+
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
+
 export default function AllDoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
@@ -89,13 +97,13 @@ export default function AllDoctorsPage() {
       });
 
       if (response.data) {
-        const data = response.data as any;
+        const data = response.data as DoctorsResponse;
         setDoctors(data.doctors || []);
         setPagination(data.pagination || pagination);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching doctors:", err);
-      setError(err.message || "Failed to load doctors");
+      setError(getErrorMessage(err, "Failed to load doctors"));
     } finally {
       setIsLoading(false);
     }

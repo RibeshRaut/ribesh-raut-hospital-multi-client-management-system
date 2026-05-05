@@ -147,7 +147,7 @@ export const withRetry = async <T>(
  * Debounce utility for API calls
  */
 
-export const debounce = <T extends (...args: any[]) => any>(
+export const debounce = <T extends (...args: unknown[]) => void>(
   func: T,
   delayMs: number = 500
 ): ((...args: Parameters<T>) => void) => {
@@ -168,7 +168,7 @@ export const debounce = <T extends (...args: any[]) => any>(
  * Throttle utility for API calls
  */
 
-export const throttle = <T extends (...args: any[]) => any>(
+export const throttle = <T extends (...args: unknown[]) => void>(
   func: T,
   limitMs: number = 1000
 ): ((...args: Parameters<T>) => void) => {
@@ -188,19 +188,19 @@ export const throttle = <T extends (...args: any[]) => any>(
  * Cache utility for GET requests
  */
 
-export class ApiCache {
-  private cache: Map<string, { data: any; timestamp: number }> = new Map();
+export class ApiCache<T = unknown> {
+  private cache: Map<string, { data: T; timestamp: number }> = new Map();
   private ttl: number; // Time to live in milliseconds
 
   constructor(ttlSeconds: number = 300) {
     this.ttl = ttlSeconds * 1000;
   }
 
-  set(key: string, data: any): void {
+  set(key: string, data: T): void {
     this.cache.set(key, { data, timestamp: Date.now() });
   }
 
-  get(key: string): any | null {
+  get(key: string): T | null {
     const cached = this.cache.get(key);
 
     if (!cached) {
@@ -236,7 +236,7 @@ export interface QueuedRequest {
   id: string;
   method: string;
   url: string;
-  body?: any;
+  body?: unknown;
   timestamp: number;
 }
 
@@ -244,7 +244,7 @@ export class RequestQueue {
   private queue: QueuedRequest[] = [];
   private processing = false;
 
-  add(method: string, url: string, body?: any): string {
+  add(method: string, url: string, body?: unknown): string {
     const id = `${Date.now()}-${Math.random()}`;
     this.queue.push({
       id,

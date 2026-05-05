@@ -1,31 +1,65 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType, type SVGProps } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Stethoscope,
   Calendar,
   Users,
   Clock,
-  TrendingUp,
   AlertCircle,
   Loader2,
-  CheckCircle,
-  XCircle,
   FileText,
   Activity,
 } from "lucide-react";
 import Link from "next/link";
-import { dashboardAPI, appointmentAPI, doctorAPI } from "@/lib/api";
+import { dashboardAPI } from "@/lib/api";
+
+type DashboardAppointment = {
+  _id: string;
+  patientName: string;
+  doctorName: string;
+  doctorSpecialty?: string;
+  appointmentDate: string;
+  status: string;
+};
+
+type DashboardStats = {
+  hospitalInfo?: {
+    name?: string;
+  };
+  statistics?: {
+    doctors?: {
+      total?: number;
+      active?: number;
+      growth?: number;
+    };
+    appointments?: {
+      today?: number;
+      pending?: number;
+      total?: number;
+      completed?: number;
+      cancelled?: number;
+      thisWeek?: number;
+    };
+    patients?: {
+      total?: number;
+    };
+    avgAppointmentDuration?: number;
+  };
+  recentAppointments?: DashboardAppointment[];
+};
+
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [recentAppointments, setRecentAppointments] = useState<any[]>([]);
+  const [recentAppointments, setRecentAppointments] = useState<DashboardAppointment[]>([]);
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -59,7 +93,7 @@ export default function DashboardPage() {
       let user;
       try {
         user = JSON.parse(userStr);
-      } catch (parseErr) {
+      } catch {
         setError("Invalid user information format");
         setIsLoading(false);
         return;
@@ -76,12 +110,13 @@ export default function DashboardPage() {
       // Fetch dashboard statistics
       const response = await dashboardAPI.getStats(hospitalId);
       if (response.data) {
-        setStats(response.data);
-        setRecentAppointments((response.data as any)?.recentAppointments || []);
+        const data = response.data as DashboardStats;
+        setStats(data);
+        setRecentAppointments(data.recentAppointments || []);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching dashboard data:", err);
-      setError(err.message || "Failed to load dashboard data");
+      setError(getErrorMessage(err, "Failed to load dashboard data"));
     } finally {
       setIsLoading(false);
     }
@@ -96,7 +131,7 @@ export default function DashboardPage() {
   }: {
     title: string;
     value: number | string;
-    icon: any;
+    icon: ComponentType<SVGProps<SVGSVGElement>>;
     color: string;
     trend?: { value: number; direction: "up" | "down" };
   }) => (
@@ -170,7 +205,7 @@ export default function DashboardPage() {
           Welcome, {stats?.hospitalInfo?.name}
         </h1>
         <p className="text-muted-foreground">
-          Here's what's happening at your hospital today.
+          Here&apos;s what&apos;s happening at your hospital today.
         </p>
       </div>
 
