@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // This should be an environment variable
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const SHOULD_FETCH_SETTINGS = Boolean(API_URL && !API_URL.includes('localhost'));
 
 async function getPlatformSettings() {
   try {
+    if (!SHOULD_FETCH_SETTINGS || !API_URL) {
+      return null;
+    }
+
     const res = await fetch(`${API_URL}/api/platform`);
     if (!res.ok) {
       console.error("Failed to fetch platform settings:", res.statusText);
@@ -18,23 +23,25 @@ async function getPlatformSettings() {
 }
 
 export async function middleware(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
+  try {
+    const pathname = request.nextUrl.pathname;
 
-  // Get the token and user info from cookies
-  const token = request.cookies.get('token')?.value;
-  const userInfoCookie = request.cookies.get('userInfo')?.value;
-  
-  let userType = null;
-  if (userInfoCookie) {
-    try {
-      const userInfo = JSON.parse(userInfoCookie);
-      userType = userInfo.userType;
-    } catch (e) {
-      // Cookie parse failed
+    // Get the token and user info from cookies
+    const token = request.cookies.get('token')?.value;
+    const userInfoCookie = request.cookies.get('userInfo')?.value;
+
+    let userType: string | null = null;
+    if (userInfoCookie) {
+      try {
+        const decoded = decodeURIComponent(userInfoCookie);
+        const userInfo = JSON.parse(decoded) as { userType?: string };
+        userType = userInfo.userType || null;
+      } catch {
+        // Cookie parse failed
+      }
     }
-  }
 
-  const settings = await getPlatformSettings();
+    const settings = await getPlatformSettings();
 
   // During maintenance mode
   if (settings?.maintenanceMode) {
@@ -88,7 +95,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  return NextResponse.next();
+    return NextResponse.next();
+  } catch (error) {
+    console.error('Middleware error:', error);
+    return NextResponse.next();
+  }
 }
 
 export const config = {
