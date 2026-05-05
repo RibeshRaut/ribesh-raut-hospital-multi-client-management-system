@@ -345,7 +345,7 @@ export default function ChatsPage() {
       const data = await response.json();
 
       if (data.success) {
-        setChats((Array.isArray(data.chats) ? data.chats : []).map((chat) => normalizeChat(chat)));
+        setChats((Array.isArray(data.chats) ? data.chats : []).map((chat: unknown) => normalizeChat(chat)));
       }
     } catch (error) {
       console.error("Error fetching chats:", error);
