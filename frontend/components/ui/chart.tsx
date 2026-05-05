@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { ApexOptions, ApexAxisChartSeries, ApexNonAxisChartSeries } from "apexcharts";
+import { ApexOptions } from "apexcharts";
 
 const ReactApexChart = dynamic(() => import("react-apexcharts"), {
   ssr: false,
@@ -14,7 +14,7 @@ const ReactApexChart = dynamic(() => import("react-apexcharts"), {
 
 interface ChartProps {
   options: ApexOptions;
-  series: ApexAxisChartSeries | ApexNonAxisChartSeries;
+  series: NonNullable<ApexOptions["series"]>;
   type:
     | "line"
     | "area"
