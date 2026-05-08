@@ -6,7 +6,7 @@ import {
   CreateDoctorRequest,
 } from './types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 // Custom Error class for API errors
 export class APIError extends Error implements ApiError {

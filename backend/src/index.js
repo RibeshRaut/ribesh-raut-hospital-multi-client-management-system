@@ -46,8 +46,9 @@ const startServer = async () => {
       { timezone: SUMMARY_TIMEZONE }
     );
     
-    httpServer.listen(process.env.PORT || 3000, () => {
-      console.log(`Server is running on port ${process.env.PORT || 3000}...`);
+    const PORT = process.env.PORT || 3000;
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server is running on port ${PORT}...`);
       console.log(
         `Daily summary scheduler active: ${DAILY_SUMMARY_CRON} (${SUMMARY_TIMEZONE})`
       );

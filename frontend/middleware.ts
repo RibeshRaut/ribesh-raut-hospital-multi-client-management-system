@@ -1,28 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// This should be an environment variable
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
-const SHOULD_FETCH_SETTINGS = Boolean(API_URL && !API_URL.includes('localhost'));
-
-async function getPlatformSettings() {
-  try {
-    if (!SHOULD_FETCH_SETTINGS || !API_URL) {
-      return null;
-    }
-
-    const res = await fetch(`${API_URL}/api/platform`);
-    if (!res.ok) {
-      console.error("Failed to fetch platform settings:", res.statusText);
-      return null;
-    }
-    return await res.json();
-  } catch (error) {
-    console.error("Error fetching platform settings:", error);
-    return null;
-  }
-}
-
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   try {
     const pathname = request.nextUrl.pathname;
 
@@ -41,59 +19,27 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    const settings = await getPlatformSettings();
+    // Define public pages that should redirect if authenticated
+    const publicPages = ['/login', '/register', '/forgot-password', '/reset-password', '/hospitals', '/'];
+    const isPublicPage = publicPages.some(page => pathname === page || pathname.startsWith('/hospital/'));
 
-  // During maintenance mode
-  if (settings?.maintenanceMode) {
-    // Allow maintenance page
-    if (pathname === '/maintenance') {
-      return NextResponse.next();
-    }
-    
-    // Allow super admins to access their dashboard and settings
-    if (userType === 'website_admin' && token) {
-      if (pathname.startsWith('/super-admin')) {
-        return NextResponse.next();
+    // Define protected pages
+    const protectedPages = ['/dashboard', '/super-admin'];
+    const isProtectedPage = protectedPages.some(page => pathname.startsWith(page));
+
+    // If user is authenticated and on a public page, redirect to dashboard
+    if (token && isPublicPage) {
+      if (userType === 'website_admin') {
+        return NextResponse.redirect(new URL('/super-admin', request.url));
+      } else {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
       }
     }
-    
-    // Allow login page for everyone
-    if (pathname === '/login') {
-      return NextResponse.next();
+
+    // If user is not authenticated and on a protected page, redirect to login
+    if (!token && isProtectedPage) {
+      return NextResponse.redirect(new URL('/login', request.url));
     }
-    
-    // Redirect everyone else to maintenance page
-    if (!pathname.startsWith('/_next') && !pathname.startsWith('/public')) {
-      return NextResponse.redirect(new URL('/maintenance', request.url));
-    }
-  }
-
-  // If in maintenance page and mode is off, redirect to home
-  if (pathname === '/maintenance' && !settings?.maintenanceMode) {
-    return NextResponse.redirect(new URL('/', request.url));
-  }
-
-  // Define public pages that should redirect if authenticated
-  const publicPages = ['/login', '/register', '/forgot-password', '/reset-password', '/hospitals', '/'];
-  const isPublicPage = publicPages.some(page => pathname === page || pathname.startsWith('/hospital/'));
-
-  // Define protected pages
-  const protectedPages = ['/dashboard', '/super-admin'];
-  const isProtectedPage = protectedPages.some(page => pathname.startsWith(page));
-
-  // If user is authenticated and on a public page, redirect to dashboard
-  if (token && isPublicPage) {
-    if (userType === 'website_admin') {
-      return NextResponse.redirect(new URL('/super-admin', request.url));
-    } else {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-  }
-
-  // If user is not authenticated and on a protected page, redirect to login
-  if (!token && isProtectedPage) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
 
     return NextResponse.next();
   } catch (error) {
@@ -111,6 +57,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      */
-    '/((?!_next/static|_next/image|favicon.ico|public|api).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public|_api).*)',
   ],
 };
