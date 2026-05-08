@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: hmt-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/index.js
+    healthCheckPath: /
+    healthCheckInterval: 30
+    maxShutdownDelay: 10
